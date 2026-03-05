@@ -8,6 +8,7 @@ library(sf)
 library(stars)
 # Define the list of PCRaster file paths
 pcraster_files <- list.files(path = "D:/tilloal/Documents/01_Projects/RegimeShifts/catmasks/", pattern = "\\.map$", full.names = TRUE)
+pcraster_files <- list.files(path = "D:/tilloal/Documents/01_Projects/RegimeShifts/catmasks/hybas", pattern = "\\.map$", full.names = TRUE)
 
 # Initialize an empty list to store the polygons
 polygons_list <- list()
@@ -63,12 +64,12 @@ desired_columns <- c("geometry","Name")
 
 # Combine all the polygon sf objects into one
 combined_polygons <- do.call(rbind, polygons_list)
- st_crs(combined_polygons) <- 4326 
+st_crs(combined_polygons) <- 4326 
 # Optionally, you might want to ensure there are no overlapping geometries
 #combined_polygons <- st_union(combined_polygons)
 
 # Save the combined polygons as a shapefile
-st_write(combined_polygons, "D:/tilloal/Documents/01_Projects/RegimeShifts/OtherCatchments_polygon.shp")
+st_write(combined_polygons, "D:/tilloal/Documents/01_Projects/RegimeShifts/HybasCatchments_Cpolygon.shp")
 
 
 #Step 2: load upstream catchments, match them with ID and with catchments, compute total area

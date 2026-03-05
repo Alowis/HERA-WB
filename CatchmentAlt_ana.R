@@ -287,8 +287,11 @@ CatUpA$outlet[which(CatUpA$outlet==3 & CatUpA$upa<2e4)]=2
 
 
 
-Cathybas=CatUpA[which(CatUpA$outlet==1),]
-
+Cathybas=CatUpA[which(CatUpA$outlet==1),c(22,23,21)]
+st_geometry(Cathybas)=NULL
+colnames(Cathybas)<-c("X","Y","ID")
+Cathybas=as.matrix(Cathybas)
+write.table(Cathybas, file = "D:/tilloal/Documents/01_Projects/RegimeShifts/cathybmatch.txt", sep = "\t", row.names = FALSE, col.names = FALSE) 
 
 
 Catmrdik=CatUpA[which(CatUpA$outlet!=1),c(22,23,21)]

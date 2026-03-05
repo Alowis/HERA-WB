@@ -94,8 +94,8 @@ for (i in 1:length(Vsfloc$upa)){
   oula=st_distance(v2,v1)
   oula=oula/1000
   oula=as.numeric(oula)
-  oulala<-oula[which(oula<20)]
-  oulaID=v2[which(oula<20),]
+  oulala<-oula[which(oula<50)]
+  oulaID=v2[which(oula<50),]
   rup=oulaID$upa/Vsfloc$upa[i]
   rkup=which(rup<1.1 & rup>0.9)
   length(rkup)
@@ -149,7 +149,7 @@ ggplot(basemap) +
              breaks=c(101,1000,10000,100000,500000), labels=c("100","1000", "10 000", "100 000", "500 000"))+
   scale_fill_gradientn(
     colors=palet,oob = scales::squish, name="distance to gauge",
-    breaks=c(0,5,10,15,20), labels=c(0,5,10,15,20)) +
+    breaks=c(0,5,10), labels=c(0,5,10)) +
   coord_sf(xlim = c(min(nco[,1]),max(nco[,1])), ylim = c(min(nco[,2]),max(nco[,2])))+
   labs(x="Longitude", y = "Latitude") +
   guides(fill = guide_colourbar(barwidth = 20, barheight = 0.5,reverse=F),
@@ -172,7 +172,7 @@ ggplot(basemap) +
 #load Q at outlets
 Q <- fread(paste0(hydroDir,"/tss/HERA_Histo/disWin_1951_2020.csv"),header=TRUE)
 time1=Q$V1
-timeStampX=time[order(time)]
+timeStampX=time1[order(time1)]
 Q=Q[order(time1),]
 
 
@@ -273,6 +273,8 @@ RegimeQ<-function(data){
 #continue with a simple look of kge on monthly regime to show perfomances
 for (s in 1:length(Station_data_IDs)){
   Station=Station_data_IDs[s]
+  #Station="6457010"
+  # s=which(Station_data_IDs==Station)
   Outlet<-Outlets_data_IDs[s]
   id_obs=match(Station,Station_obs_IDs)
   id_sim=match(Outlet,Qsim_ids)
@@ -292,27 +294,93 @@ for (s in 1:length(Station_data_IDs)){
     timeStampD<-unique(as.Date(timeStampX))
     Qobs=data.frame(timeStampD,Q_loc)
     Robs=RegimeQ(Qobs)
+    # plot(HERA_qd)
+    #remove days where obs are NAs for a fair comparison
+    HERA_qd$HERA_loc[which(is.na(Qobs$Q_loc))]=NA
     Rsim=RegimeQ(HERA_qd)
-    # plot(Rsim$Regime)
-    # lines(Robs$Regime)
-    
+    Robs2=RegimeFast(Qobs)
+    Rsim2=RegimeFast(HERA_qd)
+    # plot(Rsim$data$Qs[c(240:280)], type="o")
+    # lines(Robs$data$Qs[240:280], col=2)
+    # 
+    # plot(Rsim$Regim,type="o")
+    # lines(Robs$Regime,col=2)
     #same for Qsim
     kge_Qmon=KGE(Rsim$data$Qs,Robs$data$Qs, na.rm=TRUE, method="2012",out.type="full")
     kge_Reg=KGE(Rsim$Regime$mean,Robs$Regime$mean, na.rm=TRUE, method="2012",out.type="full")
+    kge_Reg2=KGE(Rsim2$mean,Robs2$mean, na.rm=TRUE, method="2012",out.type="full")
     skills_cor=rbind(skills_cor,c(Station,kge_Qmon$KGE.value,kge_Qmon$KGE.elements,
-                                  kge_Reg$KGE.value,kge_Reg$KGE.elements))
+                                  kge_Reg$KGE.value,kge_Reg$KGE.elements,kge_Reg2$KGE.value,
+                                  kge_Reg2$KGE.elements))
   }
 }
 
-hist(skills_cor[,2], breaks=120)
-length(which(skills_cor[,2]>0.5))/length(skills_cor[,2])
+hist(skills_cor[,7], breaks=50)
+mean(skills_cor[,7])
+length(which(skills_cor[,7]>0.5))/length(skills_cor[,7])
 plot(skills_cor[,4],skills_cor[,6],xlim=c(-0,2))
+
+
+#look at locs with shitty KGE
+strangishit<-skills_cor[,1][which(skills_cor[,7]<0.2)]
+
+dcheck<-ValidSY[which(!is.na(match(ValidSY$V1,strangishit))),]
+
+ddcheck<-mOutSt1[which(!is.na(match(mOutSt1$station,strangishit))),]
+
+ppl <- ddcheck
+ppl <- st_transform(ppl, crs = 3035)
+ggplot(basemap) +
+  geom_sf(fill="gray95", color=NA) +
+  geom_sf(data=ppl,aes(geometry=geometry,size=upa, fill=dist),color="transparent",alpha=.9,shape=21,stroke=0)+ 
+  geom_sf(fill=NA, color="grey20") +
+  scale_x_continuous(breaks=seq(-30,40, by=5)) +
+  scale_size(range = c(1, 4), trans="sqrt",name= expression(paste("Upstream area ", (km^2),
+                                                                  sep = " ")),
+             breaks=c(101,1000,10000,100000,500000), labels=c("100","1000", "10 000", "100 000", "500 000"))+
+  scale_fill_gradientn(
+    colors=palet,oob = scales::squish, name="distance to gauge",
+    breaks=c(0,5,10,15,20), labels=c(0,5,10,15,20)) +
+  coord_sf(xlim = c(min(nco[,1]),max(nco[,1])), ylim = c(min(nco[,2]),max(nco[,2])))+
+  labs(x="Longitude", y = "Latitude") +
+  guides(fill = guide_colourbar(barwidth = 20, barheight = 0.5,reverse=F),
+         size= guide_legend(override.aes = list(fill = "grey50")))+
+  theme(axis.title=element_text(size=tsize),
+        panel.background = element_rect(fill = "aliceblue", colour = "grey1"),
+        panel.border = element_rect(linetype = "solid", fill = NA, colour="black"),
+        legend.title = element_text(size=tsize),
+        legend.text = element_text(size=osize),
+        legend.position = "bottom",
+        legend.box = "vertical",
+        panel.grid.major = element_line(colour = "grey85",linetype="dashed"),
+        panel.grid.minor = element_line(colour = "grey90"),
+        legend.key = element_rect(fill = "transparent", colour = "transparent"),
+        legend.key.size = unit(.8, "cm"))
+
+
+
+#Use the matched stations for show off
+mOutStSave=mOutSt1[,c(1,19:27,34:36)]
+mOutStSave=inner_join(mOutStSave,ValidSY, by=c("station"="V1"))
+
+#add performances
+skills_cor=data.frame(skills_cor)
+
+plot(skills_cor$r.1,skills_cor$r.2)
+mean(skills_cor$V10)
+mean(skills_cor$V6)
+
+skillsave<-skills_cor[,c(1,2,3,6,7,10,11)]
+colnames(skillsave)=c("station","KGE.qmon","r.qmon","KGE.Regmon","r.Regmon","KGE.Regd","r.Regd")
+mOutStSave=inner_join(mOutStSave,skillsave, by=c("station"))
+write.csv(mOutStSave,file="D:/tilloal/Documents/01_Projects/RegimeShifts/outlets_stations.csv")
 
 ## Figure S2 Upstream area--------------------------------------
 
 ### Figure S2.a Map of upstream area--------------------------------------
 
-length(which(ValidSYl$UpA<=250))/length(ValidSYl$Var2)
+min(mOutStSave$upa.y)
+length(which(mOutStSave$upa.y<=25000))/length(mOutStSave$HYBAS_ID)
 #Plot parameters
 cord.dec=ValidSYl[,c(1,2)]
 cord.dec = SpatialPoints(cord.dec, proj4string=CRS("+proj=longlat"))
