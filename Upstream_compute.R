@@ -7,15 +7,18 @@ library(raster)
 library(sf)
 library(stars)
 # Define the list of PCRaster file paths
-pcraster_files <- list.files(path = "D:/tilloal/Documents/01_Projects/RegimeShifts/catmasks/", pattern = "\\.map$", full.names = TRUE)
-pcraster_files <- list.files(path = "D:/tilloal/Documents/01_Projects/RegimeShifts/catmasks/hybas", pattern = "\\.map$", full.names = TRUE)
+pcraster_files1 <- list.files(path = "D:/tilloal/Documents/01_Projects/RegimeShifts/catmasks/", pattern = "\\.map$", full.names = TRUE)
+pcraster_files2 <- list.files(path = "D:/tilloal/Documents/01_Projects/RegimeShifts/catmasks/hybas", pattern = "\\.map$", full.names = TRUE)
 
+pcraster_files=c(pcraster_files1,pcraster_files2)
 # Initialize an empty list to store the polygons
 polygons_list <- list()
-
+i=0
 # Loop through each PCRaster file
 for (pcraster_file in pcraster_files) {
-  print(pcraster_file)
+  i=i+1
+  if (i %% 50 == 0) cat("Processing catchment:", pcraster_file, "\n")
+
   r <- read_stars(pcraster_file)
   
   # Convert raster to polygons
@@ -69,7 +72,7 @@ st_crs(combined_polygons) <- 4326
 #combined_polygons <- st_union(combined_polygons)
 
 # Save the combined polygons as a shapefile
-st_write(combined_polygons, "D:/tilloal/Documents/01_Projects/RegimeShifts/HybasCatchments_Cpolygon.shp")
+st_write(combined_polygons, "D:/tilloal/Documents/01_Projects/RegimeShifts/All_catchment_raw.shp")
 
 
 #Step 2: load upstream catchments, match them with ID and with catchments, compute total area

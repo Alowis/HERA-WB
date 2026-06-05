@@ -162,6 +162,7 @@ log10_minor_break = function (...){
     return(10^(minor_breaks))
   }
 }
+
 # Prepare work environment -------
 setwd("D:/tilloal/Documents/LFRuns_utils")
 hydroDir<-("D:/tilloal/Documents/LFRuns_utils/data")
@@ -171,6 +172,12 @@ outletname="outletsv8_hybas07_01min"
 outhybas=outletopen(hydroDir,outletname)
 outhybas$latlong=paste(round(outhybas$Var1,4),round(outhybas$Var2,4),sep=" ")
 
+
+## 2‑a  LDD raster (NetCDF)  -------------------------------------------------
+nc_path <- "D:/tilloal/Documents/06_Floodrivers/mapscal/ldd_European_01min.nc"                 # <-- change to your file
+ldd_raw <- rast(nc_path)   # replace "LDD" with the exact variable name
+
+
 #Hybas07
 Catchmentrivers7=read.csv(paste0(hydroDir,"/Catchments/from_hybas_eu_onlyid.csv"),encoding = "UTF-8", header = T, stringsAsFactors = F)
 hybas07 <- read_sf(dsn = paste0(hydroDir,"/Catchments/hydrosheds/hybas_eu_lev07_v1c.shp"))
@@ -179,6 +186,29 @@ Catamere07=inner_join(hybasf7,Catchmentrivers7,by= "HYBAS_ID")
 Catamere07$llcoord=paste(round(Catamere07$POINT_X,4),round(Catamere07$POINT_Y,4),sep=" ") 
 Catf7=inner_join(Catamere07,outhybas,by= c("llcoord"="latlong"))
 
+
+#load matched hybas catchments as well
+hybas_path <- "D:/tilloal/Documents/01_Projects/RegimeShifts/data/HYBAS07_pixelized.shp"
+hybas_pix <- st_read(hybas_path, quiet = TRUE) %>%
+  st_make_valid() %>%   
+  st_transform(crs(ldd_raw)) 
+
+length(unique(hybas_pix$PFAF_ID))
+hybas_pix <- hybas_pix %>%
+  mutate(area_km2 = as.numeric(st_area(.)) / 1e6)
+
+# 3. Dissolve by region ID and sum areas
+regions_dissolved <- hybas_pix %>%
+  group_by(PFAF_ID) %>%               # replace 'region_id' with your ID column name
+  summarise(
+    total_area = sum(area_km2),    # sum of original polygon areas
+    geometry = st_union(geometry)       # merge geometries
+  )
+
+st_geometry(Catf7)=NULL
+Catf7t=inner_join(Catf7,regions_dissolved,by= c("PFAF_ID"))
+
+plot(Catf7t$SUB_AREA,Catf7t$total_area)
 #Aggregate at catchment level and plot
 #Plot parameters
 palet=c(hcl.colors(9, palette = "BuPu", alpha = NULL, rev = TRUE, fixup = TRUE))
@@ -216,13 +246,12 @@ head(UpArea)
 out1=outletopen(hydroDir,"efas_rnet_100km_01min")
 out1$latlong=paste(round(out1$Var1,4),round(out1$Var2,4),sep=" ")
 mout=which(!is.na(match(outhybas$latlong,out1$latlong)))
-outhybas1=outhybas[mout,]
+outhybas1=outhybas[mout,c(6,7)]
 
 
-#save txt file
-outtxt
 
-Catf7=inner_join(Catamere07,outhybas1,by= c("llcoord"="latlong"))
+
+Catf7=inner_join(Catf7t,outhybas1,by= c("llcoord"="latlong"))
 
 #Plot parameters
 cord.dec=UpArea[,c(1,2)]
@@ -268,41 +297,62 @@ ggplot(basemap) +
         legend.key.size = unit(.8, "cm"))
 
 
-
-CatUpA=inner_join(Catf7,UpArea,by=c("llcoord"="latlong"))
+UpArea_l=UpArea[,c(1,2,3,6)]
+CatUpA=inner_join(Catf7,UpArea_l,by=c("llcoord"="latlong"))
 
 matcat=match(outhybas1$latlong,CatUpA$llcoord)
 CatUpA=CatUpA[matcat,]
-ratUp=CatUpA$SUB_AREA/CatUpA$upa
+CatUpA$ratUp=abs(CatUpA$total_area-CatUpA$upa)/(CatUpA$total_area+CatUpA$upa)
+min(CatUpA$ratUp)
 
-plot(ratUp, log="y")
-abline(h=1.5)
+plot(CatUpA$ratUp)
+abline(h=-0.5)
 abline(h=0.5)
 
+th=seq(0,.2,by=0.001)
+lhh=c()
+for (t in th){
+  lh=length(which(CatUpA$ratUp<=t))
+  lhh=c(lhh,lh)
+}
+
+plot(th,lhh)
+
 CatUpA$outlet=1
-CatUpA$outlet[which(ratUp>1.2)]=2
-CatUpA$outlet[which(ratUp<0.8)]=3
-length(CatUpA$outlet[which(ratUp>1.5)])
-CatUpA$outlet[which(CatUpA$outlet==3 & CatUpA$upa<2e4)]=2
+CatUpA$outlet[which(CatUpA$ratUp>.1)]=2
+# 
+# CatUpA$outlet[which(CatUpA$ratUp<0.9)]=3
+# length(CatUpA$outlet[which(ratUp>1.5)])
+# CatUpA$outlet[which(CatUpA$outlet==3 & CatUpA$upa<2e4)]=2
 
 
+Cathybas=CatUpA[which(CatUpA$outlet==1),]
 
-Cathybas=CatUpA[which(CatUpA$outlet==1),c(22,23,21)]
-st_geometry(Cathybas)=NULL
-colnames(Cathybas)<-c("X","Y","ID")
-Cathybas=as.matrix(Cathybas)
-write.table(Cathybas, file = "D:/tilloal/Documents/01_Projects/RegimeShifts/cathybmatch.txt", sep = "\t", row.names = FALSE, col.names = FALSE) 
+#save cathybas as shapefile
+st_write(Cathybas,"D:/tilloal/Documents/01_Projects/RegimeShifts/data/catchments_hybas2.shp")   
 
 
-Catmrdik=CatUpA[which(CatUpA$outlet!=1),c(22,23,21)]
-st_geometry(Catmrdik)=NULL
-colnames(Catmrdik)<-c("X","Y","ID")
-Catmrdik=as.matrix(Catmrdik)
-write.table(Catmrdik, file = "D:/tilloal/Documents/01_Projects/RegimeShifts/catextra.txt", sep = "\t", row.names = FALSE, col.names = FALSE)   
-Catmrdtest=Catmrdik[c(1:10),]
-write.table(Catmrdtest, file = "D:/tilloal/Documents/01_Projects/RegimeShifts/catest.txt", sep = "\t", row.names = FALSE, col.names = FALSE)   
+# Cathybas=CatUpA[which(CatUpA$outlet==1),c(22,23,21)]
+# 
+# 
+# st_geometry(Cathybas)=NULL
+# colnames(Cathybas)<-c("X","Y","ID")
+# Cathybas=as.matrix(Cathybas)
+# write.table(Cathybas, file = "D:/tilloal/Documents/01_Projects/RegimeShifts/cathybmatch.txt", sep = "\t", row.names = FALSE, col.names = FALSE) 
+
+# 
+# Catmrdik=CatUpA[which(CatUpA$outlet!=1),c(22,23,21)]
+# st_geometry(Catmrdik)=NULL
+# colnames(Catmrdik)<-c("X","Y","ID")
+# Catmrdik=as.matrix(Catmrdik)
+# write.table(Catmrdik, file = "D:/tilloal/Documents/01_Projects/RegimeShifts/catextra.txt", sep = "\t", row.names = FALSE, col.names = FALSE)   
+# Catmrdtest=Catmrdik[c(1:10),]
+# write.table(Catmrdtest, file = "D:/tilloal/Documents/01_Projects/RegimeShifts/catest.txt", sep = "\t", row.names = FALSE, col.names = FALSE)   
 
 
+Catother1=CatUpA[which(CatUpA$outlet!=1),]
+
+st_write(Catother1,"D:/tilloal/Documents/01_Projects/RegimeShifts/data/catchments_others2.shp")   
 Catother <- read_sf(dsn ="D:/tilloal/Documents/01_Projects/RegimeShifts/OtherCatchments_polygon.shp")
 Catother$outlets.x<-as.numeric(Catother$Name)
 Catother<-Catother[,-1]

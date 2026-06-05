@@ -34,12 +34,18 @@ cst7=st_transform(Catf7,  crs=3035)
 basemap=w2
 palet=c(hcl.colors(9, palette = "viridis", alpha = NULL, rev = T, fixup = TRUE))
 
+
+# --------------------------------------------------------------------------- #
+# 1.  Paths                                                                   #
+# --------------------------------------------------------------------------- #
+hydroDir  <- "D:/tilloal/Documents/LFRuns_utils/data/"
+regimeDir <- "D:/tilloal/Documents/01_Projects/RegimeShifts/"
+gpkg_path <- paste0(regimeDir, "data/catchments_analysis_final_v3.gpkg")
+
 ###load UpArea -----
 #load upstream area
 hydroDir<-("D:/tilloal/Documents/LFRuns_utils/data/")
 outletname="upArea_European_01min.nc"
-outhybas$idlalo=paste(outhybas$idlo, outhybas$idla, sep=" ")
-outhybas$latlong=paste(round(outhybas$Var1,4),round(outhybas$Var2,4), sep=" ")
 UpArea=UpAopen(hydroDir,outletname,outhybas)
 head(UpArea)
 
@@ -47,20 +53,26 @@ head(UpArea)
 out1=outletopen(hydroDir,"efas_rnet_100km_01min")
 out1$latlong=paste(round(out1$Var1,4),round(out1$Var2,4),sep=" ")
 outhybas=inner_join(out1,outhybas, by="latlong")
-
-#Upstream catchments
-UpCat<-st_read(dsn="D:/tilloal/Documents/01_Projects/RegimeShifts/Upstreamgroups.shp")
-upup<-UpCat[which(UpCat$up=="Upstream Catchments"),]
-hybas2uc<-match(upup$outlets_x,outhybas$outlets.y)
-outhybas<-outhybas[hybas2uc,]
-
-ppl <- st_as_sf(UpArea, coords = c("Var1.x", "Var2.x"), crs = 4326)
-ppl <- st_transform(ppl, crs = 3035)
+outhybas$idlalo=paste(outhybas$idlo, outhybas$idla, sep=" ")
 
 #remove Q obs that are outside
 matcat=match(outhybas$latlong,UpArea$latlong)
 UpArea=UpArea[matcat,]
 
+which(is.na(matcat))
+# Column selector: positions in CSV files matching our outlet IDs
+# (read one header row to get the column names)
+header_ref <- fread(paste0(hydroDir, "tss/HERA_Histo/SnowUpsX_1951_2020.csv"),
+                    nrows = 0, header = TRUE)
+matcol <- match(UpArea_full$outlets, as.numeric(colnames(header_ref)))
+matcol <- matcol[!is.na(matcol)]
+cnames <- as.character(UpArea$outlets) 
+
+which(is.na(matcol))
+message("Reading catchments_analysis_final.gpkg ...")
+catchments_gpkg <- st_read(gpkg_path, quiet = TRUE)
+
+catchments_plot=catchments_gpkg
 #1 Components of Q ----
 
 ## Atmospheric ----
@@ -86,10 +98,81 @@ Snowmelt <- Snowmelt[, .SD, .SDcols = matcol]
 ## Runoff and Q ----
 
 #Runoff
-Runoff<- fread(paste0(hydroDir,"/tss/HERA_Histo/surfaceRunoffUpsX_1951_2020.csv"),header=TRUE)
-# time=Runoff$V1
-# timeStampX=time[order(time)]
-# Runoff=Runoff[order(time),]
+Runoff<- fread(paste0(regimeDir,"/data/surfaceRunoffUpsX_nested_1951_2020.csv"),header=TRUE)
+time=Runoff$V1
+timeStampX=time[order(time)]
+Runoff=Runoff[order(time),]
+
+
+runoff_dt <- copy(Runoff)
+runoff_dt[, year := year(timeStampX)]
+
+# Sum within each year, then average across years -> mean annual precipitation
+yearly_runoff <- runoff_dt[, lapply(.SD, sum, na.rm = TRUE),
+                       by = year,
+                       .SDcols = cnames]
+
+mean_annual_runoff <- colMeans(yearly_runoff[, .SD, .SDcols = cnames],
+                             na.rm = TRUE)
+
+#map of runoff
+
+catchments_plot$mean_runoff<- mean_annual_runoff[
+  match(as.numeric(catchments_plot$catch_id), as.numeric(names(mean_annual_runoff)))
+]
+
+# -- 3. Plot ----------------------------------------------------------------
+palet <- hcl.colors(11, palette = "Roma", rev = F)
+
+ggplot(basemap) +
+  geom_sf(fill = "grey95", color = "grey70", linewidth = 0.2) +
+  geom_sf(data  = catchments_plot,
+          aes(geometry = geom,
+              fill     = mean_runoff),
+          color = "grey20", shape = 21, stroke = 0.2, alpha = 0.9) +
+  scale_fill_gradientn(
+    colors = palet,
+    oob    = scales::squish,
+    name   = "Mean annual\nrunoff (mm/y)",
+    breaks = seq(0, 2000, by = 10),
+    limits=c(0,100)
+  ) +
+  # scale_size(
+  #   range  = c(0.8, 5),
+  #   trans  = "sqrt",
+  #   name   = expression(paste("Upstream area (", km^2, ")")),
+  #   breaks = c(100, 1000, 10000, 100000, 500000),
+  #   labels = c("100", "1 000", "10 000", "100 000", "500 000")
+  # ) +
+  coord_sf(xlim = range(nco[, 1]), ylim = range(nco[, 2])) +
+  labs(
+    title    = "Mean annual direct runoff",
+    subtitle = "Average over 1951–2020, deaggregated to inter-catchment area",
+    x = "Longitude", y = "Latitude"
+  ) +
+  guides(
+    fill = guide_colourbar(barwidth = 0.5, barheight = 18, reverse = FALSE),
+    size = "none"
+  ) +
+  theme(
+    plot.title       = element_text(size = 14, face = "bold"),
+    plot.subtitle    = element_text(size = 11, colour = "grey40"),
+    axis.title       = element_text(size = tsize),
+    panel.background = element_rect(fill = "aliceblue", colour = "grey1"),
+    panel.border     = element_rect(linetype = "solid", fill = NA, colour = "black"),
+    panel.grid.major = element_line(colour = "grey85", linetype = "dashed"),
+    panel.grid.minor = element_line(colour = "grey90"),
+    legend.title     = element_text(size = tsize),
+    legend.text      = element_text(size = osize),
+    legend.position  = "right",
+    legend.key       = element_rect(fill = "transparent", colour = "transparent"),
+    legend.key.size  = unit(0.8, "cm")
+  )
+
+ggsave(paste0(regimeDir, "plots/mean_runoff_vf.png"),
+       width = 22, height = 16, units = "cm", dpi = 300)
+
+
 
 #Q out of upper zone
 quz<- fread(paste0(hydroDir,"/tss/HERA_Histo/qUzUpsX_1951_2020.csv"),header=TRUE)

@@ -29,6 +29,11 @@ outletname="outletsv8_hybas07_01min"
 outhybas=outletopen(hydroDir,outletname)
 outhybas$latlong=paste(round(outhybas$Var1,4),round(outhybas$Var2,4),sep=" ")
 
+## 2‑a  LDD raster (NetCDF)  -------------------------------------------------
+nc_path <- "D:/tilloal/Documents/06_Floodrivers/mapscal/ldd_European_01min.nc"                 # <-- change to your file
+ldd_raw <- rast(nc_path)   # replace "LDD" with the exact variable name
+
+
 #Hybas07
 Catchmentrivers7=read.csv(paste0(hydroDir,"/Catchments/from_hybas_eu_onlyid.csv"),encoding = "UTF-8", header = T, stringsAsFactors = F)
 hybas07 <- read_sf(dsn = paste0(hydroDir,"/Catchments/hydrosheds/hybas_eu_lev07_v1c.shp"))
@@ -36,6 +41,7 @@ hybasf7=fortify(hybas07)
 Catamere07=inner_join(hybasf7,Catchmentrivers7,by= "HYBAS_ID")
 Catamere07$llcoord=paste(round(Catamere07$POINT_X,4),round(Catamere07$POINT_Y,4),sep=" ") 
 Catf7=inner_join(Catamere07,outhybas,by= c("llcoord"="latlong"))
+cst7=st_transform(Catf7,  crs=3035)
 
 #Plot parameters
 palet=c(hcl.colors(9, palette = "BuPu", alpha = NULL, rev = TRUE, fixup = TRUE))
@@ -50,7 +56,6 @@ e2=st_transform(Europe,  crs=3035)
 w2=st_transform(world,  crs=3035)
 tsize=12
 osize=12
-cst7=st_transform(Catf7,  crs=3035)
 basemap=w2
 palet=c(hcl.colors(9, palette = "viridis", alpha = NULL, rev = T, fixup = TRUE))
 
@@ -66,44 +71,47 @@ head(UpArea)
 matcat=match(outhybas$latlong,UpArea$latlong)
 UpArea=UpArea[matcat,]
 
+UpArea_l=UpArea[,c(1,2,3,6)]
+CatUpA=inner_join(Catf7,UpArea_l,by=c("llcoord"="latlong"))
+
+
+#load matched hybas catchments as well
+hybas_path <- "D:/tilloal/Documents/01_Projects/RegimeShifts/data/HYBAS07_pixelized.shp"
+hybas_pix <- st_read(hybas_path, quiet = TRUE) %>%
+  st_make_valid() %>%   
+  st_transform(crs(ldd_raw)) 
+
+hybas_pix <- hybas_pix %>%
+  mutate(area_km2 = as.numeric(st_area(.)) / 1e6)
+
+# 3. Dissolve by region ID and sum areas
+regions_dissolved <- hybas_pix %>%
+  group_by(PFAF_ID) %>%               # replace 'region_id' with your ID column name
+  summarise(
+    total_area = sum(area_km2),    # sum of original polygon areas
+    geometry = st_union(geometry)       # merge geometries
+  )
+
+st_geometry(Catf7)=NULL
+Catf7t=inner_join(Catf7,regions_dissolved,by= c("PFAF_ID"))
+
 #keep only rivers in EU domain
 out1=outletopen(hydroDir,"efas_rnet_100km_01min")
 out1$latlong=paste(round(out1$Var1,4),round(out1$Var2,4),sep=" ")
 outhybas=inner_join(out1,outhybas, by="latlong")
 
-
-CatUpA=inner_join(Catf7,UpArea,by=c("llcoord"="latlong"))
-
-matcat=match(outhybas$latlong,CatUpA$llcoord)
-CatUpA=CatUpA[matcat,]
-ratUp=CatUpA$SUB_AREA/CatUpA$upa
-
-plot(ratUp, log="y")
-abline(h=1.5)
-abline(h=0.5)
-
-CatUpA$outlet=1
-CatUpA$outlet[which(ratUp>1.2)]=2
-CatUpA$outlet[which(ratUp<0.8)]=3
-length(CatUpA$outlet[which(ratUp>1.5)])
-CatUpA$outlet[which(CatUpA$outlet==3 & CatUpA$upa<2e4)]=2
-
-
-
-Cathybas=CatUpA[which(CatUpA$outlet==1),]
-
-## 2‑a  LDD raster (NetCDF)  -------------------------------------------------
-nc_path <- "D:/tilloal/Documents/06_Floodrivers/mapscal/ldd_European_01min.nc"                 # <-- change to your file
-ldd_raw <- rast(nc_path)   # replace "LDD" with the exact variable name
-# (If you already have a raster on disk you can skip this block.)
-
-## 2‑b  Outlet points ---------------------------------------------------------
+## 2‑b  Outlet points and shapefile ---------------------------------------------------------
 outlets <- st_as_sf(UpArea, coords = c("Var1.x", "Var2.x"), crs = 4326)
 # ppl <- st_transform(ppl, crs = 3035)          # make CRS identical to the raster
 
+allpoly_path <- "D:/tilloal/Documents/01_Projects/RegimeShifts/All_catchment_raw.shp"
+catch_tot <- st_read(allpoly_path, quiet = TRUE) %>%
+  st_transform(crs(ldd_raw)) 
 
-## 2‑c  Existing catchment polygons -------------------------------------------
-poly_path <- "D:/tilloal/Documents/01_Projects/RegimeShifts/OtherCatchments_polygon.shp"
+
+
+## 2‑c other catchment polygons -------------------------------------------
+poly_path <- "D:/tilloal/Documents/01_Projects/RegimeShifts/data/catchments_others2.shp"
 catch_pol <- st_read(poly_path, quiet = TRUE) %>%
   st_transform(crs(ldd_raw))               # same CRS as everything else
 
@@ -114,23 +122,36 @@ catch_pol <- st_read(poly_path, quiet = TRUE) %>%   # quiet = TRUE hides the pro
 
 
 #load matched hybas catchments as well
-hybas_path <- "D:/tilloal/Documents/01_Projects/RegimeShifts/data/catchments_hybas.shp"
+hybas_path <- "D:/tilloal/Documents/01_Projects/RegimeShifts/data/catchments_hybas2.shp"
 catch_hy <- st_read(hybas_path, quiet = TRUE) %>%
   st_make_valid() %>%   
   st_transform(crs(ldd_raw)) 
 
-catch_hy<-catch_hy[,c(30,36)]
+#check how HYBAS catchments compare with the catchments obtained from upstream area only.
+
+hyvsup=match(catch_hy$otlts_y_y,as.numeric(catch_tot$Name))
+
+catch_tot <- catch_tot %>%
+  mutate(area_km2 = as.numeric(st_area(.)) / 1e6)
+
+plot(catch_tot$area_km2[hyvsup],catch_hy$SUB_ARE)
+#catch_hy<-catch_hy[,c(30,36)]
 colnames(catch_hy)[1]=colnames(catch_pol)[1]
 catch_pol$group="other"
 catch_hy$group="hybas"
-#all my catchments are here for the nested analysis
+#all catchments are here for the nested analysis check
 catch_ph=rbind(catch_pol,catch_hy)
+
+
 # -----------------------------------------------------------------
 # 2‑c  Make sure we have a column called `catch_id`
 # -----------------------------------------------------------------
 # If the original file already has a field that looks like an ID (e.g. "ID",
 # "CatchID", "PolyID", …) we rename it to `catch_id`.  If not, we create one.
-catchments=catch_ph
+catchments=catch_tot
+#catchments$Name=catchments$otlts_y_x
+#catchments<-catchments[-which(is.na(catchments$Name)),]
+
 #catchments<-catch_pol
 possible_id_names <- names(catchments)[
   grepl("^id$|^Name|^poly|^feat", names(catchments), ignore.case = TRUE)
@@ -146,7 +167,6 @@ if (length(possible_id_names) > 0) {
 
 # Verify that the column really exists
 stopifnot("catch_id" %in% names(catchments))
-catchments<-catchments[-which(is.na(catchments$catch_id)),]
 # --------------------------------------------------------------
 # 3. Find direct children (loop version) ----------------------
 # --------------------------------------------------------------
@@ -174,7 +194,7 @@ outlets=st_make_valid(CatUpA)%>%
 
 # 3. Spatial Join: Find which catchment index each outlet falls into
 # This assumes one outlet per catchment
-matched_data <- match(catchments$catch_id,outlets$outlets.x)
+matched_data <- match(as.numeric(catchments$catch_id),outlets$outlets.y)
 outlets<-outlets[matched_data,]
 
 # 2. Check which centroids are inside which polygons
@@ -216,10 +236,31 @@ for (i in 1:n) {
   child_geoms <- geom_list[valid_children]
   parent_buffered <- st_buffer(parent_geom, 1)
   # st_intersection here returns the parts of children inside the parent
-  intersections <- st_intersection(child_geoms, parent_buffered)
-  intersections <- st_make_valid(intersections)
-  # Calculate areas for all intersections at once
-  inter_areas <- as.numeric(st_area(intersections)) / 1e6
+  suppressMessages(sf_use_s2(FALSE)) # switch to GEOS — handles degenerate edges gracefully
+  
+  inter_areas <- suppressMessages(vapply(valid_children, function(j) {
+    overlap <- tryCatch(
+      st_intersection(
+        st_make_valid(parent_geom),
+        st_make_valid(geom_list[j])
+      ),
+      error   = function(e) NULL,
+      warning = function(w) suppressWarnings(
+        st_intersection(
+          st_make_valid(parent_geom),
+          st_make_valid(geom_list[j])
+        )
+      )
+    )
+    if (is.null(overlap) || length(overlap) == 0 || st_is_empty(overlap)) return(0)
+    as.numeric(st_area(overlap)) / 1e6
+  }, numeric(1))
+  )
+  suppressMessages(sf_use_s2(TRUE))  # restore s2 for everything else
+  # intersections <- st_intersection(child_geoms, parent_buffered)
+  # intersections <- st_make_valid(intersections)
+  # # Calculate areas for all intersections at once
+  # inter_areas <- as.numeric(st_area(intersections)) / 1e6
   
   # Compare against child areas
   child_areas <- catchments$area_km2[valid_children]
@@ -241,17 +282,73 @@ nesting_df <- data.frame(
   child_id  = catchments$catch_id[relations[,2]]
 )
 
-# Find indices where the relationship is TRUE
-relations2 <- which(nest_matrix2, arr.ind = TRUE)
-
-# Create a mapping table
-nesting_df2 <- data.frame(
-  parent_id = catchments$catch_id[relations2[,1]], # Change 'ID' to your column name
-  child_id  = catchments$catch_id[relations2[,2]]
-)
+# # Find indices where the relationship is TRUE
+# relations2 <- which(nest_matrix2, arr.ind = TRUE)
+# 
+# # Create a mapping table
+# nesting_df2 <- data.frame(
+#   parent_id = catchments$catch_id[relations2[,1]], # Change 'ID' to your column name
+#   child_id  = catchments$catch_id[relations2[,2]]
+# )
 
 # Count how many polygons contain each specific polygon
 catchments$nesting_level <- rowSums(refined_nest_matrix)
+
+
+id_a <- which(catchments$catch_id == 292302)
+id_b <- which(catchments$catch_id == 290666)
+
+# Check what the matrix currently says
+cat("292302 contains 290666:", refined_nest_matrix[id_a, id_b], "\n")
+cat("290666 contains 292302:", refined_nest_matrix[id_b, id_a], "\n")
+
+# Check if 290666's outlet falls inside 292302's polygon
+outlet_b  <- outlets[outlets$outlets.y == 290666, ]
+polygon_a <- catchments[id_a, ]
+
+cat("Outlet 290666 intersects polygon 292302:",
+    st_intersects(polygon_a, outlet_b, sparse = FALSE)[1, 1], "\n")
+
+# Check the true geometric overlap between the two polygons
+overlap <- st_intersection(st_geometry(catchments[id_a, ]),
+                           st_geometry(catchments[id_b, ]))
+overlap_area   <- as.numeric(st_area(overlap)) / 1e6
+pct_of_290666  <- overlap_area / catchments$area_km2[id_b] * 100
+cat(sprintf("Geometric overlap: %.1f km2 (%.1f%% of 290666)\n",
+            overlap_area, pct_of_290666), "\n")
+
+cat("Source of 292302:", catchments$group[id_a], "\n")
+cat("Source of 290666:", catchments$group[id_b], "\n")
+cat("Area 292302:",      catchments$area_km2[id_a], "km2\n")
+cat("Area 290666:",      catchments$area_km2[id_b], "km2\n")
+cat("UpArea 292302:",    UpArea$upa[match(292302, UpArea$outlets)], "km2\n")
+cat("UpArea 290666:",    UpArea$upa[match(290666, UpArea$outlets)], "km2\n")
+
+# Was 290666 even a candidate for 292302 in nest_matrix2?
+id_b %in% nest_matrix2[[id_a]]
+
+cat("matched_data for 290666:", matched_data[id_b], "\n")
+cat("outlets row for 290666:", outlets$outlets.x[id_b], "\n")
+
+cat("area_km2 292302:", catchments$area_km2[id_a], "\n")
+cat("area_km2 290666:", catchments$area_km2[id_b], "\n")
+cat("290666 passes area filter:", catchments$area_km2[id_b] < catchments$area_km2[id_a], "\n")
+
+# Reproduce exactly what the loop does for i = id_a
+candidates    <- nest_matrix2[[id_a]]
+candidates    <- candidates[candidates != id_a]
+valid_children <- candidates[catchments$area_km2[candidates] < catchments$area_km2[id_a]]
+
+cat("id_b in candidates:     ", id_b %in% candidates, "\n")
+cat("id_b in valid_children: ", id_b %in% valid_children, "\n")
+
+# Now reproduce the intersection step
+parent_geom   <- geom_list[id_a]
+child_geoms   <- geom_list[valid_children]
+parent_buffered <- st_buffer(parent_geom, 1)
+
+
+
 
 plot_nested_branch <- function(sf_data, matrix, row_index) {
   # Find which columns (children) are TRUE for this row (parent)
@@ -532,7 +629,7 @@ which(is.na(final_residuals$catch_id))
 #final_residuals<-final_residuals[-which(is.na(final_residuals$catch_id)),]
 
 # Recommended: Save as GeoPackage (preserves long names and long strings)
-st_write(final_residuals, "D:/tilloal/Documents/01_Projects/RegimeShifts/data/catchments_analysis_final.gpkg", delete_dsn = TRUE)
+st_write(final_residuals, "D:/tilloal/Documents/01_Projects/RegimeShifts/data/catchments_analysis_final_v3.gpkg", delete_dsn = TRUE)
 
 
 library(ggplot2)
@@ -548,7 +645,7 @@ final_residuals$nesting_count <- sapply(strsplit(as.character(final_residuals$al
 
 ggplot(data = final_residuals) +
   # Plot the residual polygons colored by how many catchments they contain
-  geom_sf(aes(fill=residual_area_km2) ,color = "white", size = 0.1) +
+  geom_sf(aes(fill=nesting_count) ,color = "white", size = 0.1) +
   # Using the 'viridis' scale makes it readable for colorblindness and printing
  scale_fill_viridis_c(option = "plasma", trans="sqrt", name = "Number of\nNested Sub-catchments") +
   theme_minimal() +
@@ -565,7 +662,7 @@ ggplot(data = final_residuals) +
 #I have to redo this and somehow add other catchments....
 
 # Recommended: Save as GeoPackage (preserves long names and long strings)
-st_write(final_residuals, "catchments_analysis_results.gpkg", delete_dsn = TRUE)
+st_write(final_residuals, "catchments_analysis_results_v3.gpkg", delete_dsn = TRUE)
 
 #meteo(for next time)
 library(dplyr)
