@@ -354,7 +354,7 @@ UpArea <- UpArea_full[matcat, ]
 
 # Column selector: positions in CSV files matching our outlet IDs
 # (read one header row to get the column names)
-header_ref <- fread(paste0(hydroDir, "tss/HERA_Histo/SnowUpsX_1951_2020.csv"),
+header_ref <- fread(paste0(regimeDir, "data/tss/HERA_Histo/SnowUpsX_1951_2020.csv"),
                     nrows = 0, header = TRUE)
 matcol <- match(UpArea_full$outlets, as.numeric(colnames(header_ref)))
 matcol <- matcol[!is.na(matcol)]
@@ -541,14 +541,14 @@ cat(length(unreliable), "outlets have residual area < 5% of parent\n")
 # 5.  Load raw Rain & Snow, deaggregate, build Precipitation & SnowFraction  #
 # --------------------------------------------------------------------------- #
 message("Loading Rain ...")
-Rain_raw <- fread(paste0(hydroDir, "tss/HERA_SocCF/RainUpsX_1951_2020.csv"),
+Rain_raw <- fread(paste0(regimeDir, "data/tss/HERA_SocCF/RainUpsX_1951_2020.csv"),
                   header = TRUE)
 time       <- Rain_raw$V1
 timeStampX <- time[order(time)]
 Rain_raw   <- Rain_raw[order(time), .SD, .SDcols = matcol]
 
 message("Loading Snow ...")
-Snow_raw <- fread(paste0(hydroDir, "tss/HERA_Histo/SnowUpsX_1951_2020.csv"),
+Snow_raw <- fread(paste0(regimeDir, "data/tss/HERA_Histo/SnowUpsX_1951_2020.csv"),
                   header = TRUE)
 Snow_raw <- Snow_raw[order(time), .SD, .SDcols = matcol]
 
@@ -1056,7 +1056,7 @@ outputfilenames <- c(
   "percUZLZUpsX", "dSubToUzUpsX", "prefFlowUpsX", "lossUpsX"
 )
 outputfilenames <- c(
- "disWin"
+ "scovUps"
 )
 Q=FALSE
 for (var in outputfilenames) {
@@ -1064,7 +1064,7 @@ for (var in outputfilenames) {
   if(var=="disWin") Q=TRUE
   message("Batch deaggregating: ", var)
 
-  in_file <- paste0(hydroDir, "tss/HERA_Histo/", var, "_1951_2020.csv")
+  in_file <- paste0(regimeDir, "data/tss/HERA_Histo/", var, "_1951_2020.csv")
   if (!file.exists(in_file)) {
     message("  File not found, skipping: ", in_file)
     next

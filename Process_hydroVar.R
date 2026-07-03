@@ -113,7 +113,7 @@ gpkg_in_outlets <- match(cnames, as.numeric(catchments_gpkg$catch_id))
 catchments_plot  <- catchments_gpkg[gpkg_in_outlets[!is.na(gpkg_in_outlets)], ]
 
 message("Loading Rain ...")
-Rain_raw <- fread(paste0(hydroDir, "tss/HERA_SocCF/RainUpsX_1951_2020.csv"),
+Rain_raw <- fread(paste0(regimeDir, "data/tss/HERA_SocCF/rainUpsX_1951_2020.csv"),
                   header = TRUE)
 time       <- Rain_raw$V1
 timeStampX <- time[order(time)]
@@ -417,6 +417,8 @@ process_hydro_variable <- function(var_name,
     monthly_totals = monthly_totals
   )))
 }
+
+
 # --------------------------------------------------------------------------- #
 # Run for all variables
 # --------------------------------------------------------------------------- #
@@ -573,5 +575,22 @@ th1_out <- process_hydro_variable(
   sm            = TRUE,
   legend_label  = "Mean annual soil moisture (mm3/mm3)",
   plot_limits   = c(0.1, 0.4)
+)
+
+#snow
+snow <- process_hydro_variable(
+  var_name      = "snow_water_equivalent",
+  file_path     = paste0(regimeDir, "/data/scovUps_nested_1951_2020.csv"),
+  cnames        = cnames,
+  catchments_plot = catchments_plot,
+  time          = timeStampX,
+  basemap       = basemap,
+  nco           = nco,
+  regimeDir     = regimeDir,
+  palette       = "RdYlBu",
+  rev_palette   = FALSE,
+  sm            = TRUE,
+  legend_label  = "Mean Snow Water Equivalent (mm)",
+  plot_limits   = c(0, 100)
 )
 
