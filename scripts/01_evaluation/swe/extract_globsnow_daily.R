@@ -69,41 +69,45 @@ extract_year <- function(year_df, catch_ease, crop_vec) {
   year_df <- year_df[order(year_df$date), ]
   crop_ext <- terra::ext(crop_vec) # rebuild SpatExtent inside worker
 
-  # Read each file once, select the SWE layer, crop early to Europe
-  layers <- lapply(year_df$path, function(f) {
-    r <- tryCatch(terra::rast(f), error = function(e) NULL)
+  # Process each daily file independently (no stacking) so shared
+  # variable names / multi-subdataset files can't trip terra's combine.
+  rows <- lapply(seq_along(year_df$path), function(k) {
+    f <- year_df$path[k]
+    # Some GlobSnow NetCDFs expose several subdatasets; fall back to the
+    # first subdataset if a plain read fails.
+    r <- tryCatch(
+      terra::rast(f),
+      error = function(e) {
+        tryCatch(
+          terra::rast(f, subds = 1),
+          error = function(e2) NULL
+        )
+      }
+    )
     if (is.null(r)) {
       return(NULL)
     }
     if (terra::nlyr(r) > 1) r <- r[[1]] # SWE is the first field
-    terra::crop(r, crop_ext)
+    r <- terra::crop(r, crop_ext)
+    r[r < 0] <- NA # negative = water/mountain/no-data
+
+    m <- exactextractr::exact_extract(r, catch_ease, "mean", progress = FALSE)
+    out <- as.data.frame(t(as.numeric(m)))
+    colnames(out) <- catch_ease$catch_id
+    cbind(date = format(year_df$date[k], "%Y-%m-%d"), out)
   })
 
-  keep <- !vapply(layers, is.null, logical(1))
-  layers <- layers[keep]
-  dates_k <- year_df$date[keep]
-  if (length(layers) == 0) {
+  rows <- rows[!vapply(rows, is.null, logical(1))]
+  if (length(rows) == 0) {
     return(NULL)
   }
-
-  # Stack and mask flags (negative = water/mountain/no-data)
-  r_stack <- terra::rast(layers)
-  r_stack[r_stack < 0] <- NA
-
-  # SINGLE exact_extract call for the whole year's stack
-  means <- exactextractr::exact_extract(
-    r_stack, catch_ease, "mean",
-    progress = FALSE
-  )
-  # means: rows = catchments, cols = days -> transpose to days x catchments
-  out <- as.data.frame(t(as.matrix(means)))
-  colnames(out) <- catch_ease$catch_id
-  out <- cbind(date = format(dates_k, "%Y-%m-%d"), out)
+  out <- do.call(rbind, rows)
   rownames(out) <- NULL
   out
 }
 
 # Run extraction ---------------------------------------------------
+use_parallel <- T
 cat(
   "[3/4] Extracting SWE by year",
   if (use_parallel) "(parallel)" else "(sequential)", "...\n"
@@ -130,6 +134,19 @@ if (use_parallel) {
 
 results <- results[!vapply(results, is.null, logical(1))]
 globsnow_df <- do.call(rbind, results)
+globsnow_df <- globsnow_df[order(globsnow_df$date), ]
+rownames(globsnow_df) <- NULL
+
+# Expand to a FULL daily sequence (no gaps) so every date between
+# the first and last observation is present; days with no GlobSnow
+# file are filled with NA across all catchments.
+all_dates <- seq(
+  as.Date(min(globsnow_df$date)),
+  as.Date(max(globsnow_df$date)),
+  by = "day"
+)
+full_grid <- data.frame(date = format(all_dates, "%Y-%m-%d"))
+globsnow_df <- merge(full_grid, globsnow_df, by = "date", all.x = TRUE)
 globsnow_df <- globsnow_df[order(globsnow_df$date), ]
 rownames(globsnow_df) <- NULL
 

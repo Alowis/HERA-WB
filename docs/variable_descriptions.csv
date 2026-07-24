@@ -1,0 +1,24 @@
+variable_name,long_name,units,type,description,source_file
+rainfall,Rainfall,mm/6h,flux,Liquid precipitation reaching the surface,rainUpsX_nested_1951_2020.csv
+snowfall,Snowfall,mm/6h,flux,Solid precipitation (snow),snowUpsX_nested_1951_2020.csv
+snowmelt,Snowmelt,mm/6h,flux,Melt from snowpack,snowMeltUpsX_nested_1951_2020.csv
+infiltration,Infiltration,mm/6h,flux,Water infiltrating from surface into soil layers,infUpsX_nested_1951_2020.csv
+ActEvapo,Actual evapotranspiration,mm/6h,flux,Actual ET (soil evap + transpiration + interception),ActEvapo_nested_1951_2020.csv
+surfaceRunoff,Direct surface runoff,mm/6h,flux,Water running off the surface directly to channel,surfaceRunoffUpsX_nested_1951_2020.csv
+prefFlow,Preferential flow,mm/6h,flux,Bypass flow from surface to upper groundwater zone,prefFlowUpsX_nested_1951_2020.csv
+dSubToUz,Soil to upper zone drainage,mm/6h,flux,Drainage from lower soil to upper groundwater zone,dSubToUzUpsX_nested_1951_2020.csv
+percUZLZ,Percolation UZ to LZ,mm/6h,flux,Percolation from upper to lower groundwater zone,percUZLZUpsX_nested_1951_2020.csv
+quz,Upper zone outflow,mm/6h,flux,Subsurface flow from upper groundwater zone to channel,qUzUpsX_nested_1951_2020.csv
+qlz,Baseflow (lower zone),mm/6h,flux,Baseflow from lower groundwater zone to channel,qLZUpsX_nested_1951_2020.csv
+GWloss,Groundwater loss,mm/6h,flux,Water lost from lower zone to deep aquifers,lossUpsX_nested_1951_2020.csv
+disWin,Channel discharge,m3/s,flux,Total routed channel discharge at outlet,disWin_nested_1951_2020.csv
+theta1,Upper soil moisture,mm,storage,Water stored in upper (superficial) soil layer,theta1totalX_nested_1951_2020.csv
+theta2,Middle soil moisture,mm,storage,Water stored in middle (upper) soil layer,theta2totalX_nested_1951_2020.csv
+theta3,Deep soil moisture,mm,storage,Water stored in deep (lower) soil layer,theta3totalX_nested_1951_2020.csv
+snowSWE,Snow water equivalent,mm,storage,Water stored in the snowpack,scovUps_nested_1951_2020.csv
+fracforest,Forest fraction,-,landuse,Fraction of catchment covered by forest,fracforest_European_01min_{YEAR}.nc
+fracirrigated,Irrigated cropland fraction,-,landuse,Fraction with irrigated agriculture,fracirrigated_European_01min_{YEAR}.nc
+fracother,Other land use fraction,-,landuse,Fraction with other land use,fracother_European_01min_{YEAR}.nc
+fracrice,Rice paddy fraction,-,landuse,Fraction with rice paddies,fracrice_European_01min_{YEAR}.nc
+fracsealed,Sealed fraction,-,landuse,Fraction with impervious surfaces,fracsealed_European_01min_{YEAR}.nc
+fracwater,Water body fraction,-,landuse,Fraction covered by water bodies,fracwater_European_01min_{YEAR}.nc

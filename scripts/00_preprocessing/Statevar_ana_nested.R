@@ -33,7 +33,7 @@ library(rnaturalearth)
 library(rnaturalearthdata)
 library(sp)
 
-source("functions_regime.R")
+source("D:/tilloal/Documents/01_Projects/RegimeShifts/RegimeShift_codes/functions_regime.R")
 
 # --------------------------------------------------------------------------- #
 # 1.  Paths                                                                   #
@@ -293,7 +293,72 @@ ggsave(paste0(regimeDir, "plots/Figure1_catchments_v2.png"),
 
 ################################################################################
 
-mean(catchments_gpkg$residual_area_km2)
+median(catchments_gpkg$residual_area_km2)
+sum(catchments_gpkg$residual_area_km2)
+#load climate 
+base_dir <- "D:/tilloal/Documents/01_Projects/RegimeShifts/"
+path_clim <- file.path(base_dir, "data", "koppen_geiger_0p1.tif")
+path_dem <- file.path(base_dir, "data", "dem.nc")
+
+shp <- catchments_gpkg
+
+
+# 2. CLIMATE + ELEVATION + AREA ENRICHMENT -------------------------
+message("Enriching catchments with climate / elevation / area...")
+
+clim_lookup <- c(
+  setNames(rep("Tropical", 3), as.character(1:3)),
+  setNames(rep("Arid", 4), as.character(4:7)),
+  setNames(rep("Temperate", 9), as.character(8:16)),
+  setNames(rep("Cold", 12), as.character(17:28)),
+  setNames(rep("Polar", 2), as.character(29:30))
+)
+
+clim_classes=unique(clim_lookup)
+r_clim <- terra::rast(path_clim)
+shp$clim_class <- exactextractr::exact_extract(
+  r_clim, sf::st_transform(shp, terra::crs(r_clim)),
+  fun = function(values, coverage_fractions) {
+    if (all(is.na(values))) {
+      return(NA_character_)
+    }
+    maj <- as.character(names(which.max(table(values[!is.na(values)]))))
+    unname(clim_lookup[maj])
+  }
+)
+
+r_dem <- terra::rast(path_dem)
+shp$elev_m <- exactextractr::exact_extract(
+  r_dem, sf::st_transform(shp, terra::crs(r_dem)),
+  fun = "mean"
+)
+
+shp <- shp %>%
+  mutate(
+    clim_class = factor(
+      clim_class,
+      levels = c("Polar", "Cold", "Temperate", "Arid", "Tropical")
+    ),
+    elev_class = cut(
+      elev_m,
+      breaks = c(-Inf, 200, 500, 1000, 2000, Inf),
+      labels = c("< 200 m", "200-500 m", "500-1000 m", "1000-2000 m", "> 2000 m")
+    ),
+    area_class = cut(
+      area_km2,
+      breaks = quantile(area_km2, probs = c(0, .25, .50, .75, 1), na.rm = TRUE),
+      labels = c("Q1 (smallest)", "Q2", "Q3", "Q4 (largest)"),
+      include.lowest = TRUE
+    )
+  )
+
+meta_lut <- st_drop_geometry(shp) %>%
+  dplyr::select(catch_id, clim_class, residual_area_km2, area_class, elev_m, elev_class)
+
+sum(meta_lut$residual_area_km2[which(meta_lut$clim_class==clim_classes[5])])/sum(meta_lut$residual_area_km2)
+
+max(meta_lut$elev_m)
+
 # Expected columns (written by Nested_Catchments.R):
 #   catch_id, area_km2, residual_area_km2,
 #   immediate_nested_ids   <- comma-separated catch_ids of immediate children
@@ -1056,7 +1121,7 @@ outputfilenames <- c(
   "percUZLZUpsX", "dSubToUzUpsX", "prefFlowUpsX", "lossUpsX"
 )
 outputfilenames <- c(
- "scovUps"
+ "infUpsX"
 )
 Q=FALSE
 for (var in outputfilenames) {
@@ -1083,8 +1148,8 @@ for (var in outputfilenames) {
     Vari_res  <- Vari_res[, lapply(.SD, function(x) pmax(0, x))]
   }
   Vari_res <- data.table(time[order(time)],Vari_res)
-  nik=Vari_res[["307087"]]
-  mean(nik)
+  # nik=Vari_res[["307087"]]
+  # mean(nik)
   fwrite(Vari_res,
          paste0(regimeDir, "data/", var, "_nested_1951_2020.csv"),
          sep = ",", na = "-9999", row.names = FALSE,

@@ -1,4 +1,56 @@
-.Rproj.user
-.Rhistory
+# =============================================================================
+# .gitignore for RegimeShift_codes
+# =============================================================================
+
+# --- Data (large, not version-controlled) ---
+data/
+catmasks/
+
+# --- Output (regenerated from scripts) ---
+output/
+plots/
+
+# --- R workspace and intermediate files ---
+*.Rdata
+*.RData
+*.rds
+*.Rhistory
 .RData
-.Ruserdata
+.Rproj.user/
+
+# --- Binary and large files ---
+*.nc
+*.nc.aux.xml
+*.tif
+*.tif.aux.xml
+*.map
+*.gpkg
+*.gpkg-shm
+*.gpkg-wal
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.qpj
+
+# --- System files ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- IDE ---
+.vscode/
+.kiro/
+*.Rproj
+
+# --- Python ---
+__pycache__/
+*.pyc
+.env/
+venv/
+
+# --- Temporary ---
+workspace/
+*.tmp
+*.log

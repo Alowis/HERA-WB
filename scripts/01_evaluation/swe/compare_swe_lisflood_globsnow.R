@@ -328,7 +328,7 @@ plot_swe_timeseries <- function(catchment_id,
   ) +
     ggplot2::geom_line(na.rm = TRUE) +
     ggplot2::scale_color_manual(
-      values = c("GlobSnow" = "#1b9e77", "LISFLOOD" = "#d95f02")
+      values = c("GlobSnow" = "#1b9e77", "HERA-WC" = "#d95f02")
     ) +
     ggplot2::labs(
       title = paste("SWE Comparison \u2013 Catchment", catchment_id),
