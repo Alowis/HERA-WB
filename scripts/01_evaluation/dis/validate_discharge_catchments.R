@@ -156,6 +156,50 @@ compute_spearman <- function(x, y) {
     )
 }
 
+compute_spearman <- function(mat_obs, mat_mod, ids) {
+  rbindlist(lapply(ids, function(id) {
+    x <- mat_mod[[id]]
+    y <- mat_obs[[id]]
+    valid_idx <- which(!is.na(x) & !is.na(y))
+    n=length(valid_idx)
+    
+    if (length(valid_idx) < 10 || all(is.na(y)) || all(is.na(x))) {
+      return(list(
+        catch_id = id, rho = NA_real_, p_val = NA_real_,
+        n_eff = NA_real_, status = "No Data"
+      ))
+    }
+    
+    xv <- x[valid_idx]
+    yv <- y[valid_idx]
+    n <- length(xv)
+    
+    if (sd(xv) == 0 || sd(yv) == 0) {
+      return(list(
+        catch_id = id, rho = NA_real_, p_val = NA_real_,
+        n_eff = NA_real_, status = "No Variance"
+      ))
+    }
+    
+    rho <- cor(xv, yv, method = "spearman")
+    
+    r1x <- cor(xv[-n], xv[-1], use = "complete.obs")
+    r1y <- cor(yv[-n], yv[-1], use = "complete.obs")
+    r1 <- mean(c(r1x, r1y), na.rm = TRUE)
+    r1 <- max(0, r1)
+    
+    n_eff <- max(3, floor(n * (1 - r1) / (1 + r1)))
+    t_stat <- rho * sqrt((n_eff - 2) / (1 - rho^2))
+    p_corr <- 2 * pt(abs(t_stat), df = n_eff - 2, lower.tail = FALSE)
+    
+    status <- if (is.na(p_corr) || p_corr >= 0.05) "Not Significant" else "Significant"
+    
+    list(
+      catch_id = id, rho = round(rho, 2), p_val = p_corr, n_obs = n,
+      mean_obs = mean(yv), mean_sim = mean(xv), n_eff = n_eff, status = status
+    )
+  }))
+}
 # ---------------------------------------------------------------------------
 # Function to compute per-station correlations with optional smoothing
 # k = smoothing window (1 = daily, 7 = 7-day, 14 = 14-day, 30 = monthly)
@@ -239,15 +283,21 @@ compute_all_stations <- function(matches, Q_sim, Station_sim_IDs, Q_cor,
         }
 
         # Apply rolling mean smoothing if k > 1
-        sim_final <- paired$sim
-        obs_final <- paired$obs
+        sim_final <- data.table(paired$sim)
+        obs_final <- data.table(paired$obs) 
         if (k > 1) {
-            sim_final <- data.table::frollmean(sim_final, n = k, align = "right", na.rm = TRUE)
-            obs_final <- data.table::frollmean(obs_final, n = k, align = "right", na.rm = TRUE)
+            obs_final[, agg := (seq_len(.N) - 1) %/% k]
+            sim_final[, agg := (seq_len(.N) - 1) %/% k]
+            obs_final <- obs_final[, lapply(.SD, mean, na.rm = TRUE), by = agg]
+            sim_final <- sim_final[, lapply(.SD, mean, na.rm = TRUE), by = agg]
+            # sim_final <- data.table::frollmean(sim_final, n = k, align = "right", na.rm = TRUE)
+            # obs_final <- data.table::frollmean(obs_final, n = k, align = "right", na.rm = TRUE)
         }
 
         # Compute Spearman
-        sp <- compute_spearman(sim_final, obs_final)
+        daily_cols <- setdiff(names(sim_final), "agg")
+        sp <- compute_spearman(sim_final, obs_final,daily_cols)
+        sp$catch_id=cid
 
         station_results[[i]] <- data.frame(
             catch_id = cid, station_id = sid, match_type = mtype,
@@ -283,12 +333,12 @@ station_df_7d <- compute_all_stations(
     k = 7
 )
 
-cat("  Computing 14-day rolling mean...\n")
-station_df_14d <- compute_all_stations(
+cat("  Computing 15-day rolling mean...\n")
+station_df_15d <- compute_all_stations(
     matches, Q_sim, Station_sim_IDs, Q_cor, Station_cor_IDs,
     Q_data, Station_obs_IDs, date_sim, date_obs, date_cor,
     rm_obs, has_corrected,
-    k = 14
+    k = 15
 )
 
 cat("  Computing 30-day rolling mean...\n")
@@ -302,16 +352,16 @@ station_df_30d <- compute_all_stations(
 # Add scenario labels
 station_df$scenario <- "Daily"
 station_df_7d$scenario <- "7-Day"
-station_df_14d$scenario <- "14-Day"
+station_df_15d$scenario <- "15-Day"
 station_df_30d$scenario <- "Monthly"
 
 # Combine all windows
-station_df_all <- rbind(station_df, station_df_7d, station_df_14d, station_df_30d)
+station_df_all <- rbind(station_df, station_df_7d, station_df_15d, station_df_30d)
 station_df_all$scenario <- factor(station_df_all$scenario,
-    levels = c("Daily", "7-Day", "14-Day", "Monthly")
+    levels = c("Daily", "7-Day", "15-Day", "Monthly")
 )
 
-median(station_df$spearman_rho, na.rm = TRUE)
+median(station_df_15d$spearman_rho, na.rm = TRUE)
 cat(sprintf(
     "  Stations with valid rho (daily): %d / %d\n",
     sum(!is.na(station_df$spearman_rho)), nrow(station_df)
@@ -323,9 +373,15 @@ cat(sprintf(
 cat("[3/5] Aggregating to catchment level...\n")
 
 # Function to aggregate station results to catchment level
-aggregate_to_catchment <- function(sdf) {
+aggregate_to_catchment <- function(sdf, match) {
     sdf$upa_ratio <- sdf$station_upa / sdf$catchment_upa
 
+    # if (match=="strict"){
+    #   sdf=sdf[which(sdf$match_type="strict"),]
+    # }
+    # if (match=="relaxed"){
+    #   sdf=sdf[which(sdf$match_type="relaxed"),]
+    # }
     catchment_summary <- sdf %>%
         group_by(catch_id) %>%
         summarise(
@@ -396,16 +452,17 @@ aggregate_to_catchment <- function(sdf) {
     catchment_summary
 }
 
+
 # Aggregate each window
 catchment_summary <- aggregate_to_catchment(station_df)
 catchment_summary_7d <- aggregate_to_catchment(station_df_7d)
-catchment_summary_14d <- aggregate_to_catchment(station_df_14d)
+catchment_summary_15d <- aggregate_to_catchment(station_df_15d)
 catchment_summary_30d <- aggregate_to_catchment(station_df_30d)
 
 # Label and combine
 catchment_summary$scenario <- "Daily"
 catchment_summary_7d$scenario <- "7-Day"
-catchment_summary_14d$scenario <- "14-Day"
+catchment_summary_15d$scenario <- "15-Day"
 catchment_summary_30d$scenario <- "Monthly"
 
 catchment_summary_all <- rbind(
@@ -413,7 +470,7 @@ catchment_summary_all <- rbind(
     catchment_summary_14d, catchment_summary_30d
 )
 catchment_summary_all$scenario <- factor(catchment_summary_all$scenario,
-    levels = c("Daily", "7-Day", "14-Day", "Monthly")
+    levels = c("Daily", "7-Day", "15-Day", "Monthly")
 )
 
 cat(sprintf(
@@ -425,6 +482,14 @@ cat(sprintf(
     sum(catchment_summary$n_stations > 1)
 ))
 
+median(catchment_summary$spearman_rho[which(catchment_summary$match_type=="strict")])
+length(which(catchment_summary$spearman_rho[which(catchment_summary$match_type=="strict")]>0.5))/
+  length(catchment_summary$spearman_rho[which(catchment_summary$match_type=="strict")])
+
+
+median(catchment_summary$spearman_rho[which(catchment_summary$match_type=="relaxed")])
+length(which(catchment_summary$spearman_rho[which(catchment_summary$match_type=="relaxed")]>0.5))/
+  length(catchment_summary$spearman_rho[which(catchment_summary$match_type=="relaxed")])
 # ===========================================================================
 # SECTION 5: Export CSVs
 # ===========================================================================

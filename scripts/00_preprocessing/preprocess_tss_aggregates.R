@@ -13,16 +13,42 @@ base_dir <- "D:/tilloal/Documents/01_Projects/RegimeShifts/"
 tss_dir <- file.path(base_dir, "data", "tss_postprocess")
 agg_dir <- file.path(base_dir, "data", "aggregates")
 
-# --- Variables to process -----------------------------------------------------
+# --- All available variables ---------------------------------------------------
 # name: folder name for output
 # file: TSS filename
-# agg_method: "sum" for fluxes (snowfall, snowmelt, percolation), "mean" for states (theta3)
-variables <- list(
+# agg_method: "sum" for fluxes, "mean" for states
+all_variables <- list(
+    list(name = "rainfall", file = "rainUpsX_nested_1951_2020.csv", agg_method = "sum"),
     list(name = "snowfall", file = "snowUpsX_nested_1951_2020.csv", agg_method = "sum"),
     list(name = "snowmelt", file = "snowMeltUpsX_nested_1951_2020.csv", agg_method = "sum"),
+    list(name = "infiltration", file = "infUpsX_nested_1951_2020.csv", agg_method = "sum"),
+    list(name = "ActEvapo", file = "ActEvapo_nested_1951_2020.csv", agg_method = "sum"),
+    list(name = "runoff", file = "surfaceRunoffUpsX_nested_1951_2020.csv", agg_method = "sum"),
+    list(name = "prefflow", file = "prefFlowUpsX_nested_1951_2020.csv", agg_method = "sum"),
+    list(name = "dSubToUz", file = "dSubToUzUpsX_nested_1951_2020.csv", agg_method = "sum"),
+    list(name = "percolation", file = "percUZLZUpsX_nested_1951_2020.csv", agg_method = "sum"),
+    list(name = "quz", file = "qUzUpsX_nested_1951_2020.csv", agg_method = "sum"),
+    list(name = "qlz", file = "qLZUpsX_nested_1951_2020.csv", agg_method = "sum"),
+    list(name = "gwloss", file = "lossUpsX_nested_1951_2020.csv", agg_method = "sum"),
+    list(name = "theta1", file = "theta1totalX_nested_1951_2020.csv", agg_method = "mean"),
+    list(name = "theta2", file = "theta2totalX_nested_1951_2020.csv", agg_method = "mean"),
     list(name = "theta3", file = "theta3totalX_nested_1951_2020.csv", agg_method = "mean"),
-    list(name = "percolation", file = "percUZLZUpsX_nested_1951_2020.csv", agg_method = "sum")
+    list(name = "snow_water_equivalent", file = "scovUps_nested_1951_2020.csv", agg_method = "mean"),
+    list(name = "discharge", file = "disWin_nested_1951_2020.csv", agg_method = "mean")
 )
+
+# --- Choose which variables to process ----------------------------------------
+# Set to NULL to process ALL, or provide a character vector of names to process
+# Example: process_only <- c("rainfall", "snowfall", "theta3")
+process_only <- c("prefflow") # NULL = process all
+
+if (!is.null(process_only)) {
+    variables <- all_variables[sapply(all_variables, function(v) v$name %in% process_only)]
+    cat("Processing selected variables:", paste(process_only, collapse = ", "), "\n")
+} else {
+    variables <- all_variables
+    cat("Processing ALL", length(variables), "variables\n")
+}
 
 # --- Date sequence ------------------------------------------------------------
 n_days <- as.integer(as.Date("2020-12-31") - as.Date("1951-01-01")) + 1

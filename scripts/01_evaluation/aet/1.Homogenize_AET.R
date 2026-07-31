@@ -81,11 +81,11 @@ lf_m <- data.table::fread(lf_month_path)
 lf_m[, date := substr(as.character(period_end), 1, 7)]
 lf_m[, c("month_idx", "period_start", "period_end") := NULL]
 
-# GLEAM monthly: aggregate GLEAM daily wide to monthly means
+# GLEAM monthly: aggregate GLEAM daily wide to monthly sums
 gleam_m <- copy(gleam_d)
 gleam_m[, date := substr(date, 1, 7)]
 num_cols <- setdiff(names(gleam_m), "date")
-gleam_m <- gleam_m[, lapply(.SD, mean, na.rm = TRUE), by = date, .SDcols = num_cols]
+gleam_m <- gleam_m[, lapply(.SD, sum, na.rm = TRUE), by = date, .SDcols = num_cols]
 
 monthly <- align_wide(gleam_m, lf_m)
 monthly$obs <- round_cols(monthly$obs)

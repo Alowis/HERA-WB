@@ -38,10 +38,11 @@ norm_id <- function(x) {
 message("Loading stats, time series and catchments...")
 aet_ts <- readRDS(file.path(path_stats, "AET_time_series_all_scenarios.rds"))
 stats_daily <- readRDS(file.path(path_stats, "stats_daily.rds"))
-stats_7d <- readRDS(file.path(path_stats, "stats_7d.rds"))
-stats_15d <- readRDS(file.path(path_stats, "stats_15d.rds"))
-stats_month <- readRDS(file.path(path_stats, "stats_month.rds"))
-
+stats_7d <- readRDS(file.path(path_stats, "pearson_extremes_daily.rds"))
+stats_7d$rho <- stats_7d$pearson_top20
+stats_15d <- readRDS(file.path(path_stats, "pearson_extremes_daily.rds"))
+stats_15d$rho <- stats_15d$pearson_bot20
+stats_month <- readRDS(file.path(path_stats, "stats_regime.rds"))
 shp <- st_read(file_shp, quiet = TRUE)
 shp$join_id <- norm_id(shp$catch_id)
 
@@ -102,9 +103,9 @@ attach_meta <- function(stats_df, label) {
         mutate(scenario = label)
 }
 all_meta <- bind_rows(
-    attach_meta(stats_daily, "Daily"), attach_meta(stats_7d, "7-Day"),
-    attach_meta(stats_15d, "15-Day"), attach_meta(stats_month, "Monthly")
-) %>% mutate(scenario = factor(scenario, levels = c("Daily", "7-Day", "15-Day", "Monthly")))
+    attach_meta(stats_daily, "Daily"), attach_meta(stats_7d, "Top 20%"),
+    attach_meta(stats_15d, "Bottom 20%"), attach_meta(stats_month, "Regime")
+) %>% mutate(scenario = factor(scenario, levels = c("Daily", "Top 20%", "Bottom 20%", "Regime")))
 
 # 4. SCATTER TABLE -------------------------------------------------
 message("Building scatter table...")
@@ -129,7 +130,7 @@ plot_dt <- rbind(
     build_scatter_dt(aet_ts$`15d`$obs, aet_ts$`15d`$mod, "c) 15-Day"),
     build_scatter_dt(aet_ts$monthly$obs, aet_ts$monthly$mod, "d) Monthly")
 )
-plot_dt[, scenario := factor(scenario, levels = c("a) Daily", "b) 7-Day", "c) 15-Day", "d) Monthly"))]
+plot_dt[, scenario := factor(scenario, levels = c("a) Daily", "b) Top 20%", "c) Bottom 20%", "d) Regime"))]
 plot_dt[, clim_class := factor(clim_class, levels = c("Polar", "Cold", "Temperate", "Arid", "Tropical"))]
 ax_lim <- range(
     quantile(plot_dt$mod, c(0.02, 0.98), na.rm = TRUE),
@@ -158,6 +159,7 @@ clim_pal <- c(
 )
 scen_pal <- c("Daily" = "#bdbdbd", "7-Day" = "#74c4e4", "15-Day" = "#2c9e4b", "Monthly" = "#1a3f7a")
 
+scen_pal <- c("Daily" = "#bdbdbd", "Top 20%" = "#74c4e4", "Bottom 20%" = "#2c9e4b", "Regime" = "#1a3f7a")
 # 6. FIG 0 | SPATIAL rho MAPS --------------------------------------
 message("Fig 0...")
 world <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
@@ -193,14 +195,14 @@ build_map <- function(spatial_df, ttl) {
             legend.position = "bottom", legend.key.width = grid::unit(1.6, "cm")
         )
 }
-fig0 <- (build_map(map_d, "a) Daily") + build_map(map_7, "b) 7-Day") +
-    build_map(map_15, "c) 15-Day") + build_map(map_m, "d) Monthly")) +
+fig0 <- (build_map(map_d, "a) Daily") + build_map(map_7, "b) Top 20%") +
+    build_map(map_15, "c) Bottom 20%") + build_map(map_m, "d) Regime")) +
     plot_layout(ncol = 4, guides = "collect") & theme(legend.position = "bottom")
 fig0 <- fig0 + plot_annotation(
-    title = "AET cross-comparison: LISFLOOD vs GLEAM (Spearman \u03c1)",
+    title = "AET cross-comparison: HERA-WB vs GLEAM (Spearman \u03c1)",
     subtitle = "Grey = insignificant (p \u2265 0.05) | White = no data"
 )
-ggsave(file.path(path_out, "Fig0_AET_spatial_rho.png"), fig0,
+ggsave(file.path(path_out, "Fig0_AET_spatial_performances.png"), fig0,
     width = 40, height = 13, units = "cm", dpi = 300, bg = "white"
 )
 
@@ -224,7 +226,7 @@ fig1 <- ggplot(all_meta, aes(scenario, rho, fill = scenario)) +
     scale_y_continuous(limits = c(-0.35, 1.02), breaks = seq(-0.25, 1, 0.25)) +
     labs(title = "Fig. 1 | Spearman \u03c1 across aggregations (AET)", x = NULL, y = "Spearman \u03c1") +
     theme_nature()
-ggsave(file.path(path_out, "Fig1_AET_rho_violin.png"), fig1,
+ggsave(file.path(path_out, "Fig1_AET_perf_violin.png"), fig1,
     width = 16, height = 12, units = "cm", dpi = 300, bg = "white"
 )
 

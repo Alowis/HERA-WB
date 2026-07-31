@@ -50,437 +50,144 @@ if (length(missing_ids) > 0) {
   )
 }
 
-# Extract GLEAM AET per catchment ----------------------------------
-cat("[2/6] Extracting GLEAM AET...\n")
 
-nc_files <- list.files(
-  gleam_dir,
-  pattern = "^E_\\d{4}_GLEAM_v4\\.3a_MO\\.nc$",
-  full.names = TRUE
+
+# =============================================================================
+# SEASONAL CYCLE COMPARISON: Mean monthly AET (GLEAM vs LISFLOOD)
+# Uses homogenized monthly data from Diego pipeline
+# =============================================================================
+cat("[7/7] Computing seasonal cycle comparison...\n")
+
+library(data.table)
+
+# --- Load homogenized monthly data --------------------------------------------
+in_dir <- file.path(base_dir, "output", "aet_diego", "1.homogenized")
+# 
+# obs_d <- data.table::fread(file.path(in_dir, "gleam_daily_homog.csv"))
+# mod_d <- data.table::fread(file.path(in_dir, "lisflood_daily_homog.csv"))
+obs_m <- data.table::fread(file.path(in_dir, "gleam_monthly_homog.csv"), header = TRUE)
+mod_m <- data.table::fread(file.path(in_dir, "lisflood_monthly_homog.csv"), header = TRUE)
+# 
+# obs_d[, date := as.IDate(date)]
+# mod_d[, date := as.IDate(date)]
+
+daily_cols <- setdiff(names(mod_d), "date")
+month_cols <- setdiff(names(mod_m), "date")
+
+# Parse dates
+obs_m[, date := as.Date(paste0(date, "-15"), format = "%Y-%m-%d")]
+obs_m[, month := month(date)]
+
+mod_m[, date := as.Date(paste0(date, "-15"), format = "%Y-%m-%d")]
+mod_m[, month := month(date)]
+
+# Catchment columns (common between obs and mod)
+meta_cols <- c("date", "month")
+obs_catches <- setdiff(names(obs_m), meta_cols)
+mod_catches <- setdiff(names(mod_m), meta_cols)
+common_cols <- intersect(obs_catches, mod_catches)
+
+cat("  Common catchments:", length(common_cols), "\n")
+cat("  Months:", nrow(obs_m), "(GLEAM),", nrow(mod_m), "(LISFLOOD)\n")
+
+# --- Area weights -------------------------------------------------------------
+if ("residual_area_km2" %in% names(catchments)) {
+  area_vec <- catchments$residual_area_km2[match(
+    common_cols, as.character(catchments$catch_id)
+  )]
+} else {
+  area_vec <- rep(1, length(common_cols))
+}
+area_vec[is.na(area_vec)] <- 1
+weights <- area_vec / sum(area_vec, na.rm = TRUE)
+
+# --- Continental mean seasonal cycle (area-weighted) --------------------------
+seasonal_gleam <- sapply(1:12, function(m) {
+  mat <- as.matrix(obs_m[month == m, ..common_cols])
+  monthly_means <- colMeans(mat, na.rm = TRUE)
+  sum(monthly_means * weights, na.rm = TRUE)
+})
+
+seasonal_lf <- sapply(1:12, function(m) {
+  mat <- as.matrix(mod_m[month == m, ..common_cols])
+  monthly_means <- colMeans(mat, na.rm = TRUE)
+  sum(monthly_means * weights, na.rm = TRUE)
+})
+
+seasonal_df <- data.frame(
+  month = rep(1:12, 2),
+  AET = c(seasonal_gleam, seasonal_lf),
+  source = rep(c("GLEAM v4.3a", "HERA-WB"), each = 12)
 )
 
-if (length(nc_files) == 0) {
-  stop("No GLEAM NetCDF files found in: ", gleam_dir)
+# --- Plot: Continental mean seasonal cycle ------------------------------------
+month_labels <- c("J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D")
+
+p_seasonal <- ggplot(seasonal_df, aes(x = month, y = AET, color = source)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2.5) +
+  scale_x_continuous(breaks = 1:12, labels = month_labels) +
+  scale_color_manual(values = c("HERA-WB" = "steelblue", "GLEAM v4.3a" = "firebrick")) +
+  labs(
+    title = "Mean monthly AET: HERA-WB vs GLEAM (continental average)",
+    subtitle = paste0("Area-weighted mean over ", length(common_cols), " catchments"),
+    x = "Month", y = "Mean AET (mm/month)",
+    color = NULL
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.position = "bottom"
+  )
+
+p_seasonal
+ggsave(file.path(plots_dir, "aet_seasonal_cycle_continental.png"),
+  p_seasonal,
+  width = 8, height = 5, dpi = 200
+)
+cat("  -> Saved aet_seasonal_cycle_continental.png\n")
+
+# --- Per-catchment seasonal bias (month by month) -----------------------------
+seasonal_bias <- data.table(catch_id = common_cols)
+
+for (m in 1:12) {
+  gleam_m <- colMeans(as.matrix(obs_m[month == m, ..common_cols]), na.rm = TRUE)
+  lf_m <- colMeans(as.matrix(mod_m[month == m, ..common_cols]), na.rm = TRUE)
+  seasonal_bias[, paste0("bias_m", sprintf("%02d", m)) := lf_m - gleam_m]
 }
 
-n_files <- length(nc_files)
-results_list <- vector("list", n_files * 12)
-idx <- 1L
-
-for (i in seq_along(nc_files)) {
-  f <- nc_files[i]
-  fname <- basename(f)
-  yr <- substr(fname, 3, 6)
-
-  cat("[2/6] Extracting GLEAM AET (file", i, "of", n_files, ")...\n")
-
-  r <- tryCatch(
-    terra::rast(f),
-    error = function(e) {
-      warning("Could not read file: ", fname, " - skipping")
-      NULL
-    }
-  )
-  if (is.null(r)) next
-
-  for (band in seq_len(nlyr(r))) {
-    r_band <- r[[band]]
-    mo <- sprintf("%02d", band)
-    date_str <- paste0(yr, "-", mo)
-
-    means <- exact_extract(r_band, catchments, "mean")
-
-    row_df <- data.frame(
-      date = date_str,
-      t(means),
-      stringsAsFactors = FALSE,
-      check.names = FALSE
-    )
-    colnames(row_df) <- c("date", catchments$catch_id)
-    results_list[[idx]] <- row_df
-    idx <- idx + 1L
-  }
-}
-
-# Remove NULLs from failed reads
-results_list <- results_list[!vapply(
-  results_list, is.null, logical(1)
-)]
-
-gleam_df <- do.call(rbind, results_list)
-gleam_df <- gleam_df[order(gleam_df$date), ]
-rownames(gleam_df) <- NULL
-
-# Save GLEAM catchment CSV -----------------------------------------
-cat("[3/6] Saving GLEAM catchment CSV...\n")
-
-dir.create(dirname(gleam_csv_path), recursive = TRUE, showWarnings = FALSE)
-write.csv(gleam_df, gleam_csv_path, row.names = FALSE)
-
-# start here if GLEAM data already generated
-gleam_df <- read.csv(gleam_csv_path)
-
-# Load LISFLOOD AET and align temporally ---------------------------
-cat("[4/6] Loading LISFLOOD AET and aligning temporally...\n")
-
-lisflood_df <- read.csv(lisflood_path, check.names = FALSE)
-
-lisflood_dates <- format(
-  seq.Date(
-    as.Date("1951-01-01"),
-    as.Date("2020-12-01"),
-    by = "month"
-  ),
-  "%Y-%m"
+# --- Plot: Seasonal bias boxplots ---------------------------------------------
+bias_long <- melt(seasonal_bias,
+  id.vars = "catch_id",
+  variable.name = "month_col", value.name = "bias"
 )
+bias_long[, month := as.integer(sub("bias_m", "", month_col))]
 
-lisflood_df$date <- lisflood_dates
+p_bias_seasonal <- ggplot(bias_long, aes(x = factor(month), y = bias)) +
+  geom_violin(alpha = 0.35, trim = FALSE, scale = "width", fill = "royalblue") +
+  geom_boxplot(width = 0.12, outlier.shape = NA, fill = "white", fatten = 2) +
+  # geom_boxplot(fill = "lightyellow", outlier.size = 0.5, outlier.alpha = 0.3) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  scale_x_discrete(labels = month_labels) +
+  labs(
+    title = "Monthly AET bias (HERA-WB - GLEAM) across all catchments",
+    x = "Month", y = "Bias (mm/month)"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_text(face = "bold"))
 
-# Determine overlapping period as set intersection
-overlap_dates <- intersect(lisflood_dates, gleam_df$date)
-
-# Compute Spearman correlation per catchment -----------------------
-cat("[5/6] Computing Spearman correlations...\n")
-
-catch_ids <- catchments$catch_id
-n_catch <- length(catch_ids)
-
-cor_results <- data.frame(
-  catchment_id = catch_ids,
-  spearman_r = NA_real_,
-  n_obs = NA_integer_,
-  p_value = NA_real_,
-  # GLEAM data quality category per catchment:
-  #   "valid"    - has non-zero AET obs, correlation computable
-  #   "all_zero" - all GLEAM values are 0
-  #   "no_data"  - all GLEAM values are NA
-  #   "few_obs"  - some valid data but < 10 paired obs
-  gleam_category = NA_character_,
-  stringsAsFactors = FALSE
+ggsave(file.path(plots_dir, "aet_seasonal_bias_boxplot.png"),
+  p_bias_seasonal,
+  width = 8, height = 5, dpi = 200
 )
+cat("  -> Saved aet_seasonal_bias_boxplot.png\n")
 
-# Subset both data frames to overlapping dates
-gleam_sub <- gleam_df[gleam_df$date %in% overlap_dates, ]
-names(gleam_sub)[-1] <- sub("^X", "", names(gleam_sub)[-1])
-lf_sub <- lisflood_df[lisflood_df$date %in% overlap_dates, ]
-
-for (i in seq_along(catch_ids)) {
-  cid <- as.character(catch_ids[i])
-
-  gleam_vals <- gleam_sub[[cid]]
-  lf_vals <- lf_sub[[cid]]
-
-  # Classify GLEAM data quality for this catchment
-  gleam_all_na <- all(is.na(gleam_vals))
-  gleam_all_zero <- !gleam_all_na && all(gleam_vals == 0, na.rm = TRUE)
-
-  # Filter to pairwise complete (non-NA) observations
-  complete <- !is.na(gleam_vals) & !is.na(lf_vals)
-  g_complete <- gleam_vals[complete]
-  lf_complete <- lf_vals[complete]
-
-  n <- length(g_complete)
-  cor_results$n_obs[i] <- n
-
-  if (gleam_all_na) {
-    cor_results$gleam_category[i] <- "no_data"
-    cor_results$spearman_r[i] <- NA_real_
-    cor_results$p_value[i] <- NA_real_
-  } else if (gleam_all_zero) {
-    cor_results$gleam_category[i] <- "all_zero"
-    cor_results$spearman_r[i] <- NA_real_
-    cor_results$p_value[i] <- NA_real_
-  } else if (n < 10) {
-    cor_results$gleam_category[i] <- "few_obs"
-    cor_results$spearman_r[i] <- NA_real_
-    cor_results$p_value[i] <- NA_real_
-  } else {
-    cor_results$gleam_category[i] <- "valid"
-    ct <- cor.test(lf_complete, g_complete, method = "spearman")
-    cor_results$spearman_r[i] <- ct$estimate
-    cor_results$p_value[i] <- ct$p.value
-  }
-}
-
-# Save correlation summary and print completion --------------------
-cat("[6/6] Saving AET correlation summary...\n")
-
-dir.create(
-  dirname(correlation_out_path),
-  recursive = TRUE,
-  showWarnings = FALSE
+# --- Combined figure ----------------------------------------------------------
+fig_seasonal <- plot_grid(p_seasonal, p_bias_seasonal, ncol = 1, align = "v")
+ggsave(file.path(plots_dir, "aet_seasonal_comparison.png"),
+  fig_seasonal,
+  width = 9, height = 18, dpi = 200
 )
-write.csv(cor_results, correlation_out_path, row.names = FALSE)
+cat("  -> Saved aet_seasonal_comparison.png\n")
 
-if (n_catch < 1 || n_files < 1) {
-  stop(
-    "Invalid completion state: ",
-    n_catch, " catchments and ",
-    n_files, " GLEAM files processed. ",
-    "At least one of each is required."
-  )
-}
-
-median_r <- median(cor_results$spearman_r, na.rm = TRUE)
-cat(
-  "\n=== Completion Summary ===\n",
-  "Catchments processed: ", n_catch, "\n",
-  "GLEAM files processed: ", n_files, "\n",
-  "Median Spearman correlation: ", round(median_r, 4), "\n",
-  sep = ""
-)
-
-# Section 7: Diagnostic Plots --------------------------------------
-cat("[7/7] Generating diagnostic plots...\n")
-
-plot_aet_timeseries <- function(catchment_id,
-                                gleam_data = gleam_sub,
-                                lf_data = lf_sub,
-                                output_dir = file.path(
-                                  base_dir, "output", "plots"
-                                ),
-                                save = TRUE) {
-  # --- Input validation ---
-  if (is.null(catchment_id) || length(catchment_id) != 1 ||
-    !is.character(catchment_id) || is.na(catchment_id)) {
-    stop(
-      "catchment_id must be a single valid character string ",
-      "(non-NULL, non-NA)."
-    )
-  }
-  if (!catchment_id %in% names(gleam_data)) {
-    stop("Catchment '", catchment_id, "' not found in GLEAM data.")
-  }
-  if (!catchment_id %in% names(lf_data)) {
-    stop("Catchment '", catchment_id, "' not found in LISFLOOD data.")
-  }
-
-  # --- Data preparation ---
-  common_dates <- intersect(gleam_data$date, lf_data$date)
-
-  gleam_overlap <- gleam_data[gleam_data$date %in% common_dates, ]
-  lf_overlap <- lf_data[lf_data$date %in% common_dates, ]
-
-  plot_df <- data.frame(
-    date     = as.Date(paste0(gleam_overlap$date, "-01")),
-    GLEAM    = gleam_overlap[[catchment_id]],
-    LISFLOOD = lf_overlap[[catchment_id]]
-  )
-
-  plot_long <- tidyr::pivot_longer(
-    plot_df,
-    cols      = c("GLEAM", "LISFLOOD"),
-    names_to  = "source",
-    values_to = "aet"
-  )
-
-  # --- Plot construction ---
-  p <- ggplot2::ggplot(
-    plot_long,
-    ggplot2::aes(x = date, y = aet, color = source)
-  ) +
-    ggplot2::geom_line(na.rm = TRUE) +
-    ggplot2::scale_color_manual(
-      values = c("GLEAM" = "#1b9e77", "LISFLOOD" = "#d95f02")
-    ) +
-    ggplot2::labs(
-      title = paste("AET Comparison \u2013 Catchment", catchment_id),
-      x     = "Date",
-      y     = "AET (mm)",
-      color = "Source"
-    ) +
-    ggplot2::theme_minimal()
-
-  # --- Save ---
-  if (save) {
-    dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-    out_path <- file.path(
-      output_dir,
-      paste0("aet_timeseries_", catchment_id, ".png")
-    )
-    ggplot2::ggsave(out_path, p, width = 10, height = 5, dpi = 150)
-    cat("Saved:", out_path, "\n")
-  }
-
-  invisible(p)
-}
-
-# --- Correlation Map and Boxplot (template style) -----------------
-
-# Build basemap (world countries in EPSG:3035)
-world <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
-basemap <- sf::st_transform(world, crs = 3035)
-
-# Prepare catchment data in EPSG:3035
-catch_cor <- dplyr::left_join(
-  catchments,
-  cor_results,
-  by = c("catch_id" = "catchment_id")
-)
-catch_cor_3035 <- sf::st_transform(catch_cor, crs = 3035)
-
-# Derive map extent from catchment centroids (mirrors nco pattern)
-nco <- sf::st_coordinates(sf::st_centroid(catch_cor_3035))
-
-# Plot parameters (consistent with other scripts in this project)
-tsize <- 12
-osize <- 10
-palet <- hcl.colors(9, palette = "viridis", rev = TRUE, fixup = TRUE)
-limi <- c(-1, 1)
-metric <- "Spearman r"
-
-# Split catchments by GLEAM category
-parpl_valid <- catch_cor_3035[
-  !is.na(catch_cor_3035$gleam_category) &
-    catch_cor_3035$gleam_category == "valid",
-]
-parpl_allzero <- catch_cor_3035[
-  !is.na(catch_cor_3035$gleam_category) &
-    catch_cor_3035$gleam_category == "all_zero",
-]
-parpl_nodata <- catch_cor_3035[
-  is.na(catch_cor_3035$gleam_category) |
-    catch_cor_3035$gleam_category %in% c("no_data", "few_obs"),
-]
-
-# --- Map ---
-cor_map <- ggplot2::ggplot(basemap) +
-  ggplot2::geom_sf(fill = "gray95", color = NA) +
-  # No data / too few obs — grey
-  ggplot2::geom_sf(
-    data = parpl_nodata,
-    ggplot2::aes(geometry = geometry),
-    fill = "grey70", color = "transparent", alpha = 0.7,
-    shape = 21, stroke = 0
-  ) +
-  # All-zero AET — yellow
-  ggplot2::geom_sf(
-    data = parpl_allzero,
-    ggplot2::aes(geometry = geometry),
-    fill = "#f0e442", color = "transparent", alpha = 0.7,
-    shape = 21, stroke = 0
-  ) +
-  # Valid: coloured by Spearman r
-  ggplot2::geom_sf(
-    data = parpl_valid,
-    ggplot2::aes(geometry = geometry, fill = spearman_r),
-    color = "transparent", alpha = 0.7, shape = 21, stroke = 0
-  ) +
-  # Outline rings for valid catchments
-  ggplot2::geom_sf(
-    data = parpl_valid,
-    ggplot2::aes(geometry = geometry),
-    col = "grey20", alpha = 1, stroke = 0.05, shape = 1
-  ) +
-  # Country borders on top
-  ggplot2::geom_sf(fill = NA, color = "grey20") +
-  ggplot2::scale_x_continuous(breaks = seq(-30, 40, by = 10)) +
-  ggplot2::scale_fill_gradientn(
-    colors   = palet,
-    n.breaks = 5,
-    oob      = scales::squish,
-    limits   = limi,
-    name     = metric
-  ) +
-  ggplot2::coord_sf(
-    xlim = c(min(nco[, 1]), max(nco[, 1])),
-    ylim = c(min(nco[, 2]), max(nco[, 2]))
-  ) +
-  ggplot2::labs(x = "Longitude", y = "Latitude") +
-  ggplot2::guides(
-    fill = ggplot2::guide_colourbar(
-      barwidth = 0.5, barheight = 12, reverse = FALSE
-    )
-  ) +
-  ggplot2::theme(
-    axis.title = ggplot2::element_text(size = tsize),
-    panel.background = ggplot2::element_rect(
-      fill = "aliceblue", colour = "grey1"
-    ),
-    panel.border = ggplot2::element_rect(
-      linetype = "solid", fill = NA, colour = "black"
-    ),
-    legend.title = ggplot2::element_text(size = tsize),
-    legend.text = ggplot2::element_text(size = osize),
-    legend.position = "right",
-    panel.grid.major = ggplot2::element_line(
-      colour = "grey85", linetype = "dashed"
-    ),
-    panel.grid.minor = ggplot2::element_line(colour = "grey90"),
-    legend.key = ggplot2::element_rect(
-      fill = "transparent", colour = "transparent"
-    ),
-    legend.key.size = ggplot2::unit(0.8, "cm")
-  )
-
-# --- Boxplot of Spearman r (valid catchments only) ---
-r_vals <- cor_results$spearman_r[!is.na(cor_results$spearman_r)]
-box_df <- data.frame(spearman_r = r_vals)
-
-box_plot <- ggplot2::ggplot(box_df, ggplot2::aes(x = "", y = spearman_r)) +
-  ggplot2::geom_boxplot(
-    fill = "grey85", color = "grey30",
-    width = 0.4, outlier.shape = 16, outlier.size = 1.5
-  ) +
-  ggplot2::stat_summary(
-    fun = mean, geom = "point",
-    shape = 18, size = 4, color = "#d95f02"
-  ) +
-  ggplot2::stat_summary(
-    fun = mean, geom = "text",
-    ggplot2::aes(
-      label = paste0("mean=", round(ggplot2::after_stat(y), 2))
-    ),
-    hjust = -0.2, size = 3.5, color = "#d95f02"
-  ) +
-  ggplot2::stat_summary(
-    fun = median, geom = "text",
-    ggplot2::aes(
-      label = paste0("med=", round(ggplot2::after_stat(y), 2))
-    ),
-    hjust = -0.2, vjust = 2, size = 3.5, color = "grey30"
-  ) +
-  ggplot2::scale_y_continuous(
-    limits = c(-1, 1), breaks = seq(-1, 1, 0.25)
-  ) +
-  ggplot2::labs(
-    x     = NULL,
-    y     = "Spearman r",
-    title = paste0("n = ", length(r_vals))
-  ) +
-  ggplot2::theme_minimal(base_size = tsize) +
-  ggplot2::theme(
-    axis.text.x        = ggplot2::element_blank(),
-    panel.grid.major.x = ggplot2::element_blank(),
-    plot.title         = ggplot2::element_text(size = osize, hjust = 0.5)
-  )
-
-# --- Combine map + boxplot side by side ---
-combined_plot <- cowplot::plot_grid(
-  cor_map, box_plot,
-  ncol = 2,
-  rel_widths = c(3, 1),
-  align = "h",
-  axis = "tb"
-)
-
-# --- Save ---
-plots_dir <- file.path(base_dir, "output", "plots")
-dir.create(plots_dir, recursive = TRUE, showWarnings = FALSE)
-ggplot2::ggsave(
-  file.path(plots_dir, "aet_correlation_map.png"),
-  combined_plot,
-  width  = 14,
-  height = 8,
-  dpi    = 150
-)
-cat("Saved: output/plots/aet_correlation_map.png\n")
-
-# --- Example usage ---
-# Uncomment below to generate time series plots for specific catchments:
-# plot_aet_timeseries("01029")
-# plot_aet_timeseries("01245")
-#
-# To get the plot object without saving:
-# p <- plot_aet_timeseries("01029", save = FALSE)
-# p + ggplot2::theme_bw()
+cat("Seasonal cycle comparison complete.\n")

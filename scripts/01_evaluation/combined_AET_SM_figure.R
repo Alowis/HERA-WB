@@ -19,8 +19,8 @@ library(rnaturalearth)
 
 base_dir <- "D:/tilloal/Documents/01_Projects/RegimeShifts/"
 sm_stats_dir <- "Z:/ClimateRun4/nahaUsers/tilloal/SoilMositure_2026_06_03/2.Diego_Analysis/0.Stats_time_windows/"
-tsize <- 10
-osize <- 9
+tsize <- 15
+osize <- 14
 
 # ===========================================================================
 # 1. LOAD DATA
@@ -35,10 +35,10 @@ aet_15d <- as.data.frame(readRDS(file.path(path_aet_stats, "stats_15d.rds")))
 aet_month <- as.data.frame(readRDS(file.path(path_aet_stats, "stats_month.rds")))
 
 # --- Soil Moisture stats (from RDS on network drive) ---
-sm_daily <- as.data.frame(readRDS(file.path(sm_stats_dir, "stats_daily.rds")))
-sm_7d <- as.data.frame(readRDS(file.path(sm_stats_dir, "stats_7d.rds")))
-sm_15d <- as.data.frame(readRDS(file.path(sm_stats_dir, "stats_15d.rds")))
-sm_month <- as.data.frame(readRDS(file.path(sm_stats_dir, "stats_month.rds")))
+sm_daily <- as.data.frame(readRDS(file.path(sm_stats_dir, "stats_daily_snowmasked.rds")))
+sm_7d <- as.data.frame(readRDS(file.path(sm_stats_dir, "stats_7d_snowmasked.rds")))
+sm_15d <- as.data.frame(readRDS(file.path(sm_stats_dir, "stats_15d_snowmasked.rds")))
+sm_month <- as.data.frame(readRDS(file.path(sm_stats_dir, "stats_30d_snowmasked.rds")))
 
 # Fix SM catch_id (remove leading X from R column name conversion)
 sm_daily$catch_id <- sub("^X", "", sm_daily$catch_id)
@@ -90,15 +90,15 @@ build_map <- function(sp_valid, ttl) {
             ylim = c(bbox_laea["ymin"], bbox_laea["ymax"]), expand = FALSE
         ) +
         labs(subtitle = ttl) +
-        theme_minimal(base_size = 10) +
+        theme_minimal(base_size = 14) +
         theme(
             axis.title = element_blank(), axis.text = element_blank(),
             axis.ticks = element_blank(),
             panel.background = element_rect(fill = "aliceblue", colour = "grey1"),
             panel.border = element_rect(linetype = "solid", fill = NA, colour = "black"),
-            legend.title = element_text(face = "bold", size = 10, hjust = 0.5),
+            # legend.title = element_text(face = "bold", size = 10, hjust = 0.5),
             panel.grid.major = element_line(colour = "grey90", linewidth = 0.2),
-            plot.subtitle = element_text(face = "bold", size = tsize, hjust = 0.5),
+            # plot.subtitle = element_text(face = "bold", size = tsize, hjust = 0.5),
             plot.margin = margin(1, 1, 1, 1), legend.position = "bottom"
         )
 }
@@ -119,7 +119,7 @@ cat("Building AET maps...\n")
 
 aet_map1 <- build_map(make_sf(aet_daily), "Daily")
 aet_map2 <- build_map(make_sf(aet_7d), "7-Day")
-aet_map3 <- build_map(make_sf(aet_15d), "14-Day")
+aet_map3 <- build_map(make_sf(aet_15d), "15-Day")
 aet_map4 <- build_map(make_sf(aet_month), "Monthly")
 
 # ===========================================================================
@@ -129,7 +129,7 @@ cat("Building Soil Moisture maps...\n")
 
 sm_map1 <- build_map(make_sf(sm_daily), "Daily")
 sm_map2 <- build_map(make_sf(sm_7d), "7-Day")
-sm_map3 <- build_map(make_sf(sm_15d), "14-Day")
+sm_map3 <- build_map(make_sf(sm_15d), "15-Day")
 sm_map4 <- build_map(make_sf(sm_month), "Monthly")
 
 # ===========================================================================
@@ -139,18 +139,18 @@ cat("Building violin plots...\n")
 
 scen_pal <- c(
     "Daily" = "#bdbdbd", "7-Day" = "#74c4e4",
-    "14-Day" = "#2c9e4b", "Monthly" = "#1a3f7a"
+    "15-Day" = "#2c9e4b", "Monthly" = "#1a3f7a"
 )
 
 # AET violin
 aet_all <- rbind(
     cbind(aet_daily, scenario = "Daily"),
     cbind(aet_7d, scenario = "7-Day"),
-    cbind(aet_15d, scenario = "14-Day"),
+    cbind(aet_15d, scenario = "15-Day"),
     cbind(aet_month, scenario = "Monthly")
 )
 aet_all$scenario <- factor(aet_all$scenario,
-    levels = c("Daily", "7-Day", "14-Day", "Monthly")
+    levels = c("Daily", "7-Day", "15-Day", "Monthly")
 )
 aet_valid <- aet_all[!is.na(aet_all$rho), ]
 
@@ -181,18 +181,18 @@ violin_aet <- ggplot(aet_valid, aes(scenario, rho, fill = scenario)) +
     scale_fill_manual(values = scen_pal, guide = "none") +
     scale_y_continuous(limits = c(-0.35, 1.02), breaks = seq(-0.25, 1, 0.25)) +
     labs(title = NULL, x = NULL, y = "Spearman \u03c1") +
-    theme_bw(base_size = 8) +
+    theme_bw(base_size = 15) +
     theme(panel.grid.minor = element_blank(), plot.margin = margin(2, 2, 2, 2))
 
 # Soil Moisture violin
 sm_all <- rbind(
     cbind(sm_daily, scenario = "Daily"),
     cbind(sm_7d, scenario = "7-Day"),
-    cbind(sm_15d, scenario = "14-Day"),
+    cbind(sm_15d, scenario = "15-Day"),
     cbind(sm_month, scenario = "Monthly")
 )
 sm_all$scenario <- factor(sm_all$scenario,
-    levels = c("Daily", "7-Day", "14-Day", "Monthly")
+    levels = c("Daily", "7-Day", "15-Day", "Monthly")
 )
 sm_valid <- sm_all[!is.na(sm_all$rho), ]
 
@@ -223,7 +223,7 @@ violin_sm <- ggplot(sm_valid, aes(scenario, rho, fill = scenario)) +
     scale_fill_manual(values = scen_pal, guide = "none") +
     scale_y_continuous(limits = c(-0.35, 1.02), breaks = seq(-0.25, 1, 0.25)) +
     labs(title = NULL, x = NULL, y = "Spearman \u03c1") +
-    theme_bw(base_size = 8) +
+    theme_bw(base_size = 15) +
     theme(panel.grid.minor = element_blank(), plot.margin = margin(2, 2, 2, 2))
 
 # ===========================================================================
@@ -233,9 +233,9 @@ cat("Assembling combined figure...\n")
 
 # Add (a) and (b) labels to first map in each column
 aet_map1 <- aet_map1 + ggtitle("(a)")+
-theme(plot.title = element_text(face = "bold", hjust = 0, size = 14))
+theme(plot.title = element_text(face = "bold", hjust = 0, size = 18))
 sm_map1 <- sm_map1 + ggtitle("(b)")+
-theme(plot.title = element_text(face = "bold", hjust = 0, size = 14))
+theme(plot.title = element_text(face = "bold", hjust = 0, size = 18))
 
 # Column a: AET maps stacked
 col_a <- aet_map1 / aet_map2 / aet_map3 / aet_map4
@@ -245,9 +245,9 @@ col_b <- sm_map1 / sm_map2 / sm_map3 / sm_map4
 
 # Column c: Violins with (c) and (d) labels
 col_c <- (violin_aet + labs(title = "(c) ") +
-    theme(plot.title = element_text(face = "bold", hjust = 0, size = 14))) /
+    theme(plot.title = element_text(face = "bold", hjust = 0, size = 18))) /
     (violin_sm + labs(title = "(d) ") +
-        theme(plot.title = element_text(face = "bold", hjust = 0, size = 14)))
+        theme(plot.title = element_text(face = "bold", hjust = 0, size = 18)))
 
 # Combine all three columns with shared legend
 fig_combined <- (col_a | col_b | col_c) +
@@ -275,11 +275,11 @@ fig_combined <- (col_a | col_b | col_c) +
 path_out <- file.path(base_dir, "output", "combined_validation")
 dir.create(path_out, recursive = TRUE, showWarnings = FALSE)
 
-ggsave(file.path(path_out, "Fig_AET_SM_combined.png"), fig_combined,
+ggsave(file.path(path_out, "Fig_AET_SM_combined_v3.png"), fig_combined,
     width = 36, height = 30, units = "cm", dpi = 300, bg = "white"
 )
 
 cat(sprintf(
     "Done. Figure saved: %s\n",
-    file.path(path_out, "Fig_AET_SM_combined.png")
+    file.path(path_out, "Fig_AET_SM_combined_v2.png")
 ))

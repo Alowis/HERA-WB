@@ -39,9 +39,9 @@ library(grid)
 # =============================================================================
 path_stats <- "Z:\\ClimateRun4\\nahaUsers\\tilloal\\SoilMositure_2026_06_03\\2.Diego_Analysis\\0.Stats_time_windows\\"
 path_out   <- "Z:\\ClimateRun4\\nahaUsers\\tilloal\\SoilMositure_2026_06_03\\2.Diego_Analysis\\"
-file_shp   <- "Z:\\ClimateRun4\\nahaUsers\\tilloal\\SoilMositure_2026_06_03\\catchments_analysis_final_v3.gpkg"
-path_clim  <- "D:/gomezdi/My Data/0. Projects/DataHub/Climate Regions World/1991_2020/koppen_geiger_0p1.tif"
-path_dem   <- "D:/gomezdi/My Data/0. Projects/General shp/Global_DEM_1km/elevation_1KMmn_GMTEDmn.tif"
+file_shp <- file.path(base_dir, "data", "catchments_analysis_final_v3.gpkg")
+path_clim <- file.path(base_dir, "data", "koppen_geiger_0p1.tif")
+path_dem <- file.path(base_dir, "data", "dem.nc")
 
 
 # =============================================================================
@@ -49,7 +49,7 @@ path_dem   <- "D:/gomezdi/My Data/0. Projects/General shp/Global_DEM_1km/elevati
 # =============================================================================
 message("Loading data...")
 
-sm_timeseries <- readRDS(file.path(path_stats, "SM_time_series_all_scenarios.rds"))
+sm_timeseries <- readRDS(file.path(path_stats, "SM_time_series_masked_all_scenarios.rds"))
 
 drop_geom <- function(x) if (inherits(x, "sf")) sf::st_drop_geometry(x) else x
 
@@ -58,10 +58,10 @@ clean_stats <- function(path) {
   drop_geom(readRDS(path)) %>% dplyr::select(-any_of("catch_id.y"))
 }
 
-stats_daily <- clean_stats(file.path(path_stats, "stats_daily.rds"))
-stats_7d    <- clean_stats(file.path(path_stats, "stats_7d.rds"))
-stats_15d   <- clean_stats(file.path(path_stats, "stats_15d.rds"))
-stats_month <- clean_stats(file.path(path_stats, "stats_month.rds"))
+stats_daily <- clean_stats(file.path(path_stats, "stats_daily_snowmasked.rds"))
+stats_7d    <- clean_stats(file.path(path_stats, "stats_7d_snowmasked.rds"))
+stats_15d   <- clean_stats(file.path(path_stats, "stats_15d_snowmasked.rds"))
+stats_month <- clean_stats(file.path(path_stats, "stats_30d_snowmasked.rds"))
 
 shp <- st_read(file_shp, quiet = TRUE)
 
@@ -159,7 +159,7 @@ message("all_meta rows: ", nrow(all_meta),
 
 
 # =============================================================================
-# 4.  LONG SCATTER TABLE  (sm_lisf x sm_esa per catchment x time-step)
+# 4.  LONG SCATTER TABLE  (sm_mod x sm_obs per catchment x time-step)
 # =============================================================================
 message("=== Step 4: Building scatter table ===")
 
@@ -169,52 +169,56 @@ clim_lut_dt[, catch_id_x := paste0("X", catch_id)]
 build_scatter_dt <- function(lisf_wide, esa_wide, scenario_label, date_col = "date") {
   lisf_wide <- as.data.table(lisf_wide)
   esa_wide  <- as.data.table(esa_wide)
-  l  <- melt(lisf_wide, id.vars = date_col, variable.name = "catch_id_x", value.name = "sm_lisf")
-  e  <- melt(esa_wide,  id.vars = date_col, variable.name = "catch_id_x", value.name = "sm_esa")
+  l  <- melt(lisf_wide, id.vars = date_col, variable.name = "catch_id_x", value.name = "sm_mod")
+  e  <- melt(esa_wide,  id.vars = date_col, variable.name = "catch_id_x", value.name = "sm_obs")
   dt <- merge(l, e, by = c(date_col, "catch_id_x"))
-  dt <- dt[!is.na(sm_lisf) & !is.na(sm_esa)]
+  dt <- dt[!is.na(sm_mod) & !is.na(sm_obs)]
   dt <- merge(dt, clim_lut_dt[, .(catch_id_x, clim_class)], by = "catch_id_x", all.x = TRUE)
   dt[, scenario := scenario_label]
   dt
 }
 
 # Monthly: rename year_month -> date
-lisf_m_dt <- as.data.table(sm_timeseries$monthly$lisf)
-esa_m_dt  <- as.data.table(sm_timeseries$monthly$esa)
-setnames(lisf_m_dt, "year_month", "date")
-setnames(esa_m_dt,  "year_month", "date")
+# lisf_m_dt <- as.data.table(sm_timeseries$monthly$obs)
+# esa_m_dt  <- as.data.table(sm_timeseries$monthly$mod)
+# setnames(lisf_m_dt, "month", "date")
+# setnames(esa_m_dt,  "month", "date")
 
 plot_dt <- rbind(
-  build_scatter_dt(sm_timeseries$daily$lisf, sm_timeseries$daily$esa, "a) Daily"),
-  build_scatter_dt(sm_timeseries$`7d`$lisf,  sm_timeseries$`7d`$esa,  "b) 7-Day"),
-  build_scatter_dt(sm_timeseries$`15d`$lisf, sm_timeseries$`15d`$esa, "c) 15-Day"),
-  build_scatter_dt(lisf_m_dt,                 esa_m_dt,                "d) Monthly"),
+  build_scatter_dt(lisf_wide=sm_timeseries$daily$mod, esa_wide=sm_timeseries$daily$obs, "a) Daily"),
+  build_scatter_dt(sm_timeseries$`7d`$mod,  sm_timeseries$`7d`$obs,  "b) 7-Day"),
+  build_scatter_dt(sm_timeseries$`15d`$mod, sm_timeseries$`15d`$obs, "c) 15-Day"),
+  build_scatter_dt(lisf_wide=sm_timeseries$monthly$mod, esa_wide=sm_timeseries$monthly$obs,"d) Monthly"),
   fill = TRUE
 )
+
 plot_dt[, scenario   := factor(scenario,   levels = c("a) Daily","b) 7-Day","c) 15-Day","d) Monthly"))]
 plot_dt[, clim_class := factor(clim_class, levels = c("Polar","Cold","Temperate","Arid","Tropical"))]
 
 ax_lim <- range(
-  quantile(plot_dt$sm_lisf, probs = c(0.02, 0.98), na.rm = TRUE),
-  quantile(plot_dt$sm_esa,  probs = c(0.02, 0.98), na.rm = TRUE)
+  quantile(plot_dt$sm_mod, probs = c(0.02, 0.99), na.rm = TRUE),
+  quantile(plot_dt$sm_obs,  probs = c(0.02, 0.99), na.rm = TRUE)
 )
 
 # Per-panel annotation: rho + n
 ann <- plot_dt[!is.na(clim_class), .(
-  rho = round(cor(sm_lisf, sm_esa, method = "spearman", use = "complete.obs"), 2),
+  rho = round(cor(sm_mod, sm_obs, method = "spearman", use = "complete.obs"), 2),
   n   = .N
 ), by = .(scenario, clim_class)]
 ann[, label := paste0("\u03c1 = ", rho, "\nn = ", format(n, big.mark = ","))]
 
 # Stratified subsample for rendering (max 3000 pts per climate x scenario)
 set.seed(42)
-plot_dt_sub <- plot_dt[
-  !is.na(clim_class),
-  .SD[sample(.N, min(.N, 3000L))],
-  by = .(scenario, clim_class)
-]
 
-message("Scatter table ready. Total rows: ", nrow(plot_dt))
+plot_dt_sub <- plot_dt[!is.na(clim_class),
+                       {
+                         tmp <- copy(.SD)
+                         tmp[, xbin := cut(sm_mod, breaks = 100)]
+                         tmp[, .SD[sample(.N, min(.N, 100L))], by = xbin]
+                       },
+                       by = .(scenario, clim_class)
+]
+message("Scatter table ready. Total rows: ", nrow(plot_dt_sub))
 
 
 # =============================================================================
@@ -267,55 +271,50 @@ scen_pal <- c(
 # =============================================================================
 message("=== Fig 0: Spatial rho maps ===")
 
-build_map <- function(spatial_df, plot_title, EU30, eu_mask) {
-  spatial_df <- st_transform(spatial_df, 3035)
-  NUTS0_mask <- eu_mask %>%
-    dplyr::filter(NUTS0 %in% EU30) %>%
-    st_transform(3035) %>%
-    dplyr::group_by(NUTS0) %>%
-    dplyr::summarize(geometry = st_union(geometry), .groups = "drop")
-  bbox <- st_bbox(NUTS0_mask)
+message("Fig 0: spatial rho maps...")
+world <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
+basemap <- sf::st_transform(world, crs = 3035)
+
+build_map <- function(spatial_df, plot_title) {
+  sp <- sf::st_transform(spatial_df, 3035)
+  nco <- sf::st_coordinates(sf::st_centroid(sp))
   ggplot() +
-    geom_sf(data = NUTS0_mask, fill = "#f7f7f7", color = NA) +
-    geom_sf(data = spatial_df, fill = "white", color = "grey92", linewidth = 0.05) +
-    geom_sf(data = spatial_df,
-            aes(fill = ifelse(status == "Not Significant", NA, rho)),
-            color = "transparent", linewidth = 0) +
-    geom_sf(data = dplyr::filter(spatial_df, status == "Not Significant"),
-            fill = "grey75", color = "transparent", linewidth = 0) +
-    geom_sf(data = NUTS0_mask, inherit.aes = FALSE,
-            fill = NA, color = "black", linewidth = 0.22) +
-    coord_sf(crs = 3035, datum = 3035,
-             xlim = c(bbox["xmin"], bbox["xmax"]),
-             ylim = c(bbox["ymin"], bbox["ymax"]),
-             expand = FALSE) +
+    geom_sf(data = basemap, fill = "beige", color = NA) +
+    geom_sf(data = sp, fill = "grey70", color = "transparent", linewidth = 0.05) +
+    geom_sf(
+      data = sp, aes(fill = rho),
+      color = "transparent", linewidth = 0
+    ) +
+    # geom_sf(
+    #     data = dplyr::filter(sp, status == "Not Significant"),
+    #     fill = "grey75", color = "transparent", linewidth = 0
+    # ) +
+    geom_sf(data = basemap, fill = "transparent", linewidth = 0.2) +
     scale_fill_gradientn(
-      colors   = c("#ffffff","#e0f3f8","#abd9e9","#74add1","#4575b4","#313695"),
-      values   = c(0.0, 0.25, 0.50, 0.75, 0.90, 1.0),
-      limits   = c(0.0, 1.0),
-      breaks   = c(0.0, 0.25, 0.5, 0.75, 1.0),
-      oob      = scales::squish,
-      name     = "Spearman Correlation (\u03c1)",
-      na.value = "transparent"
+      colors = c("#ffffff", "#e0f3f8", "#abd9e9", "#74add1", "#4575b4", "#313695"),
+      values = c(0.0, 0.25, 0.50, 0.75, 0.90, 1.0),
+      limits = c(0, 1), breaks = c(0, 0.25, 0.5, 0.75, 1.0),
+      oob = scales::squish, name = "Spearman \u03c1", na.value = "transparent"
+    ) +
+    coord_sf(
+      crs = 3035,
+      xlim = c(min(nco[, 1]), max(nco[, 1])),
+      ylim = c(min(nco[, 2]), max(nco[, 2])), expand = FALSE
     ) +
     labs(subtitle = plot_title) +
     theme_void(base_size = 10) +
     theme(
-      plot.subtitle     = element_text(face = "bold", hjust = 0.5, size = 11,
-                                       margin = ggplot2::margin(b = 4)),
-      plot.margin       = ggplot2::margin(0, 0, 0, 0),
-      legend.position   = "bottom",
-      legend.key.width  = grid::unit(2.2, "cm"),
-      legend.key.height = grid::unit(0.4, "cm"),
-      legend.title      = element_text(size = 10, face = "bold", vjust = 0.85),
-      legend.text       = element_text(size = 9)
+      plot.subtitle = element_text(face = "bold", hjust = 0.5, size = 11),
+      legend.position = "bottom",
+      legend.key.width = grid::unit(1.6, "cm"),
+      legend.key.height = grid::unit(0.4, "cm")
     )
 }
 
-p0_1 <- build_map(map_d,  "a) Daily Resolution",      EU30, eu_mask)
-p0_2 <- build_map(map_7,  "b) 7-Day Moving Mean",     EU30, eu_mask)
-p0_3 <- build_map(map_15, "c) 15-Day Moving Mean",    EU30, eu_mask)
-p0_4 <- build_map(map_m,  "d) Natural Calendar Month", EU30, eu_mask)
+p0_1 <- build_map(map_d,  "a) Daily Resolution")
+p0_2 <- build_map(map_7,  "b) 7-Day Moving Mean")
+p0_3 <- build_map(map_15, "c) 15-Day Moving Mean")
+p0_4 <- build_map(map_m,  "d) Natural Calendar Month")
 
 fig0 <- (p0_1 + plot_spacer() + p0_2 + plot_spacer() + p0_3 + plot_spacer() + p0_4) +
   plot_layout(ncol = 7, widths = c(1,0.15,1,0.15,1,0.15,1), guides = "collect") &
@@ -333,8 +332,8 @@ fig0 <- fig0 +
     )
   )
 
-ggsave(fig0, filename = file.path(path_out, "Fig0_SM_Aggregation_Spearman_Composite_1Row.tiff"),
-       width = 54, height = 14, units = "cm", dpi = 600, compression = "lzw", bg = "white")
+ggsave(fig0, filename = file.path(path_out, "Fig0_SM_Aggregation_Spearman_Composite_1Row.png"),
+       width = 20, height = 8, units = "cm", dpi = 300, bg = "white")
 message("Fig 0 saved.")
 
 
@@ -373,8 +372,8 @@ fig1 <- ggplot(all_meta, aes(x = scenario, y = rho, fill = scenario)) +
   ) +
   theme_nature(base_size = 9)
 
-ggsave(fig1, filename = file.path(path_out, "Fig1_rho_violin_aggregations.tiff"),
-       width = 16, height = 12, units = "cm", dpi = 600, compression = "lzw", bg = "white")
+ggsave(fig1, filename = file.path(path_out, "Fig1_rho_violin_aggregations.png"),
+       width = 16, height = 12, units = "cm", dpi = 300, bg = "white")
 message("Fig 1 saved.")
 
 
@@ -384,10 +383,10 @@ message("Fig 1 saved.")
 message("=== Fig 2: Scatter panels by climate class ===")
 
 ann_overall <- plot_dt[!is.na(clim_class), .(
-  rho_all = round(cor(sm_lisf, sm_esa, method = "spearman", use = "complete.obs"), 2)
+  rho_all = round(cor(sm_mod, sm_obs, method = "spearman", use = "complete.obs"), 2)
 ), by = scenario]
 
-fig2 <- ggplot(plot_dt_sub, aes(x = sm_lisf, y = sm_esa, colour = clim_class)) +
+fig2 <- ggplot(plot_dt_sub, aes(x = sm_mod, y = sm_obs, colour = clim_class)) +
   geom_abline(slope = 1, intercept = 0, colour = "grey50", linetype = "longdash", linewidth = 0.25) +
   geom_point(alpha = 0.45, size = 0.6, stroke = 0, shape = 16) +
   geom_smooth(method = "lm", formula = y ~ x, se = FALSE, linewidth = 0.75) +
@@ -413,8 +412,8 @@ fig2 <- ggplot(plot_dt_sub, aes(x = sm_lisf, y = sm_esa, colour = clim_class)) +
   theme_nature(base_size = 9) +
   theme(legend.position = "bottom", panel.spacing = unit(1.0, "lines"))
 
-ggsave(fig2, filename = file.path(path_out, "Fig2_scatter_climate_4panels.tiff"),
-       width = 20, height = 10, units = "cm", dpi = 600, compression = "lzw", bg = "white")
+ggsave(fig2, filename = file.path(path_out, "Fig2_scatter_climate_4panels.png"),
+       width = 20, height = 10, units = "cm", dpi = 300, bg = "white")
 message("Fig 2 saved.")
 
 
@@ -423,7 +422,7 @@ message("Fig 2 saved.")
 # =============================================================================
 message("=== Fig 3: Scatter matrix ===")
 
-fig3 <- ggplot(plot_dt_sub, aes(x = sm_lisf, y = sm_esa, colour = clim_class)) +
+fig3 <- ggplot(plot_dt_sub, aes(x = sm_mod, y = sm_obs, colour = clim_class)) +
   geom_abline(slope = 1, intercept = 0, colour = "grey55", linetype = "longdash", linewidth = 0.3) +
   geom_point(alpha = 0.50, size = 0.8, stroke = 0, shape = 16) +
   geom_smooth(aes(group = clim_class), method = "lm", formula = y ~ x,
@@ -458,8 +457,8 @@ fig3 <- ggplot(plot_dt_sub, aes(x = sm_lisf, y = sm_esa, colour = clim_class)) +
 
 # Height computed so each of 5 rows gets ~equal square space:
 # 4 cols x square panels -> height proportional to 5/4 of width, plus margins for strips/labels
-ggsave(fig3, filename = file.path(path_out, "Fig3_scatter_matrix_5x4.tiff"),
-       width = 26, height = 24, units = "cm", dpi = 600, compression = "lzw", bg = "white")
+ggsave(fig3, filename = file.path(path_out, "Fig3_scatter_matrix_5x4.png"),
+       width = 26, height = 24, units = "cm", dpi = 600, bg = "white")
 message("Fig 3 saved.")
 
 
@@ -505,8 +504,8 @@ fig4 <- (p4a / (p4b + p4c)) +
                     plot.caption = element_text(size = 7, colour = "grey50", hjust = 0))
   )
 
-ggsave(fig4, filename = file.path(path_out, "Fig4_stratified_diagnostics.tiff"),
-       width = 20, height = 20, units = "cm", dpi = 600, compression = "lzw", bg = "white")
+ggsave(fig4, filename = file.path(path_out, "Fig4_stratified_diagnostics.png"),
+       width = 20, height = 20, units = "cm", dpi = 600, bg = "white")
 message("Fig 4 saved.")
 
 
@@ -541,8 +540,8 @@ fig5 <- ggplot(
   theme_nature(base_size = 9) +
   theme(axis.text.y = element_text(size = 8.5), panel.spacing = unit(1.0,"lines"))
 
-ggsave(fig5, filename = file.path(path_out, "Fig5_ridge_density_climate.tiff"),
-       width = 22, height = 10, units = "cm", dpi = 600, compression = "lzw", bg = "white")
+ggsave(fig5, filename = file.path(path_out, "Fig5_ridge_density_climate.png"),
+       width = 22, height = 10, units = "cm", dpi = 600, bg = "white")
 message("Fig 5 saved.")
 
 
@@ -634,8 +633,8 @@ fig6 <- ggplot(gain_dt, aes(x = aggregation, y = stratum, fill = delta_rho)) +
     legend.position   = "right"
   )
 
-ggsave(fig6, filename = file.path(path_out, "Fig6_aggregation_gain_heatmap.tiff"),
-       width = 18, height = 16, units = "cm", dpi = 600, compression = "lzw", bg = "white")
+ggsave(fig6, filename = file.path(path_out, "Fig6_aggregation_gain_heatmap.png"),
+       width = 18, height = 16, units = "cm", dpi = 600, bg = "white")
 message("Fig 6 saved.")
 
 

@@ -506,7 +506,7 @@ sm_path_c <- file.path(
 sm_dt_c <- fread(sm_path_c)
 sm_dt_c[, date := seq.Date(as.Date("1951-01-01"), by = "month", length.out = .N)]
 sm_dt_c[, year := year(date)]
-sm_dt_c[,month := month(date)]
+sm_dt_c[, month := month(date)]
 sm_col_cega <- find_col(catch_cega, setdiff(
     names(sm_dt_c),
     c("month_idx", "period_start", "period_end", "date", "year")
@@ -535,7 +535,7 @@ aet_path_c <- file.path(agg_dir, "ActEvapo", "ActEvapo_monthly_all_years.csv")
 aet_dt_c <- fread(aet_path_c)
 aet_dt_c[, date := seq.Date(as.Date("1951-01-01"), by = "month", length.out = .N)]
 aet_dt_c[, year := year(date)]
-aet_dt_c[,month := month(date)]
+aet_dt_c[, month := month(date)]
 aet_col_cega <- find_col(catch_cega, setdiff(
     names(aet_dt_c),
     c("month_idx", "period_start", "period_end", "date", "year")
@@ -612,8 +612,8 @@ quz_dt_f[, year := year(date)]
 quz_dt_f[, month := month(date)]
 
 qlz_path_f <- file.path(
-  agg_dir, "qlz",
-  "qlz_monthly_all_years.csv"
+    agg_dir, "qlz",
+    "qlz_monthly_all_years.csv"
 )
 qlz_dt_f <- fread(qlz_path_f)
 qlz_dt_f[, date := seq.Date(as.Date("1951-01-01"), by = "month", length.out = .N)]
@@ -621,8 +621,8 @@ qlz_dt_f[, year := year(date)]
 qlz_dt_f[, month := month(date)]
 
 runoff_path_f <- file.path(
-  agg_dir, "quz",
-  "quz_monthly_all_years.csv"
+    agg_dir, "quz",
+    "quz_monthly_all_years.csv"
 )
 runoff_dt_f <- fread(runoff_path_f)
 runoff_dt_f[, date := seq.Date(as.Date("1951-01-01"), by = "month", length.out = .N)]
@@ -635,9 +635,10 @@ catch_cols_q <- setdiff(names(quz_dt_f), meta_cols_q)
 
 # Total Q = quz + qlz + runoff (element-wise sum across all catchments)
 totalQ_dt_f <- copy(quz_dt_f)
-totalQ_dt_f[, (catch_cols_q) := Map(`+`,
-                                    Map(`+`, quz_dt_f[, ..catch_cols_q], qlz_dt_f[, ..catch_cols_q]),
-                                    runoff_dt_f[, ..catch_cols_q]
+totalQ_dt_f[, (catch_cols_q) := Map(
+    `+`,
+    Map(`+`, quz_dt_f[, ..catch_cols_q], qlz_dt_f[, ..catch_cols_q]),
+    runoff_dt_f[, ..catch_cols_q]
 )]
 
 
@@ -985,6 +986,205 @@ ggsave(file.path(out_dir, "Figure4c_SM_LISFLOOD_vs_ESACCI.png"),
     width = 10, height = 5, dpi = 200
 )
 cat("  -> Saved Figure 4c (SM comparison).\n")
+
+# =============================================================================
+# FIGURE 4c2 — Continental SM: ESA CCI vs LISFLOOD (snow-free days only)
+# =============================================================================
+cat("[Fig4c2] Continental SM (snow-masked)...\n")
+
+# Load daily SWE to identify snow days
+swe_daily_path <- file.path(
+    base_dir, "output", "swe_diego", "1.homogenized",
+    "lisflood_daily_homog.csv"
+)
+if (file.exists(swe_daily_path)) {
+    swe_daily <- fread(swe_daily_path, header = TRUE)
+    swe_daily[, date := as.Date(date)]
+
+    # Load daily SM for masking
+    sm_daily_obs_path <- file.path(
+        base_dir, "output", "soil_moisture_diego",
+        "1.Diego_Merged", "esacci_homogenized.csv"
+    )
+    sm_daily_mod_path <- file.path(
+        base_dir, "output", "soil_moisture_diego",
+        "1.Diego_Merged", "lisflood_homogenized.csv"
+    )
+
+    sm_obs_d <- fread(sm_daily_obs_path, header = TRUE)
+    sm_mod_d <- fread(sm_daily_mod_path, header = TRUE)
+    sm_obs_d[, date := as.Date(date)]
+    sm_mod_d[, date := as.Date(date)]
+
+    # Remove X prefix
+    obs_cols_sm <- setdiff(names(sm_obs_d), "date")
+    setnames(sm_obs_d, obs_cols_sm, sub("^X", "", obs_cols_sm))
+    mod_cols_sm <- setdiff(names(sm_mod_d), "date")
+    setnames(sm_mod_d, mod_cols_sm, sub("^X", "", mod_cols_sm))
+
+    # Common catchments and dates
+    swe_cols <- setdiff(names(swe_daily), "date")
+    sm_common <- Reduce(intersect, list(
+        sub("^X", "", swe_cols),
+        setdiff(names(sm_obs_d), "date"),
+        setdiff(names(sm_mod_d), "date")
+    ))
+    common_dates_sm <- Reduce(intersect, list(swe_daily$date, sm_obs_d$date, sm_mod_d$date))
+
+    # Subset to common
+    swe_sub <- swe_daily[date %in% common_dates_sm]
+    sm_obs_sub <- sm_obs_d[date %in% common_dates_sm]
+    sm_mod_sub <- sm_mod_d[date %in% common_dates_sm]
+
+    # Mask snow days (set to NA where SWE > 0)
+    for (col in sm_common) {
+        swe_col <- if (col %in% names(swe_sub)) col else paste0("X", col)
+        if (swe_col %in% names(swe_sub)) {
+            snow_mask <- swe_sub[[swe_col]] > 0
+            sm_obs_sub[snow_mask, (col) := NA_real_]
+            sm_mod_sub[snow_mask, (col) := NA_real_]
+        }
+    }
+
+    # Area-weighted annual mean (snow-free days only)
+    sm_obs_sub[, year := year(date)]
+    sm_mod_sub[, year := year(date)]
+
+    area_sm <- cats$residual_area_km2[match(sm_common, as.character(as.numeric(cats$catch_id)))]
+    area_sm[is.na(area_sm)] <- 1
+    w_sm <- area_sm / sum(area_sm, na.rm = TRUE)
+
+    lf_sm_annual_masked <- sm_mod_sub[,
+        {
+            mat <- as.matrix(.SD)
+            means <- colMeans(mat, na.rm = TRUE)
+            .(sm_mean = sum(means * w_sm, na.rm = TRUE))
+        },
+        by = year,
+        .SDcols = sm_common
+    ]
+    lf_sm_annual_masked[, source := "LISFLOOD"]
+
+    cci_sm_annual_masked <- sm_obs_sub[,
+        {
+            mat <- as.matrix(.SD)
+            means <- colMeans(mat, na.rm = TRUE)
+            .(sm_mean = sum(means * w_sm, na.rm = TRUE))
+        },
+        by = year,
+        .SDcols = sm_common
+    ]
+    cci_sm_annual_masked[, source := "ESA CCI"]
+
+    sm_masked_combined <- rbind(lf_sm_annual_masked, cci_sm_annual_masked)
+
+    p_sm_masked <- ggplot(sm_masked_combined, aes(x = year, y = sm_mean, color = source)) +
+        geom_line(linewidth = 0.7) +
+        geom_smooth(method = "loess", span = 0.4, se = FALSE, linewidth = 0.9) +
+        scale_color_manual(values = c("LISFLOOD" = "steelblue", "ESA CCI" = "darkorange")) +
+        labs(
+            title = "Continental SM (snow-free days only) \u2014 LISFLOOD vs ESA CCI",
+            x = NULL, y = "Annual mean SM (m\u00b3/m\u00b3)",
+            color = NULL
+        ) +
+        theme_minimal(base_size = 12) +
+        theme(
+            plot.title = element_text(face = "bold", size = 13),
+            legend.position = "bottom"
+        )
+
+    ggsave(file.path(out_dir, "Figure4c2_SM_snowmasked.png"),
+        p_sm_masked,
+        width = 10, height = 5, dpi = 200
+    )
+    cat("  -> Saved Figure 4c2 (SM snow-masked).\n")
+} else {
+    cat("  SWE daily file not found, skipping snow-masked SM.\n")
+}
+
+# =============================================================================
+# FIGURE 4e — Continental mean SWE: GlobSnow vs LISFLOOD
+# =============================================================================
+cat("[Fig4e] Continental mean SWE: GlobSnow vs LISFLOOD...\n")
+
+swe_obs_path <- file.path(
+    base_dir, "output", "swe_diego", "1.homogenized",
+    "globsnow_monthly_homog.csv"
+)
+swe_mod_path <- file.path(
+    base_dir, "output", "swe_diego", "1.homogenized",
+    "lisflood_monthly_homog.csv"
+)
+
+if (file.exists(swe_obs_path) && file.exists(swe_mod_path)) {
+    swe_obs_m <- fread(swe_obs_path, header = TRUE)
+    swe_mod_m <- fread(swe_mod_path, header = TRUE)
+
+    swe_obs_m[, date := as.Date(paste0(date, "-15"), format = "%Y-%m-%d")]
+    swe_obs_m[, year := year(date)]
+    swe_mod_m[, date := as.Date(paste0(date, "-15"), format = "%Y-%m-%d")]
+    swe_mod_m[, year := year(date)]
+
+    swe_catch_cols <- intersect(
+        setdiff(names(swe_obs_m), c("date", "year")),
+        setdiff(names(swe_mod_m), c("date", "year"))
+    )
+
+    # Area weights
+    area_swe <- cats$residual_area_km2[match(
+        swe_catch_cols, as.character(as.numeric(cats$catch_id))
+    )]
+    area_swe[is.na(area_swe)] <- 1
+    w_swe <- area_swe / sum(area_swe, na.rm = TRUE)
+
+    # Annual mean SWE (area-weighted)
+    swe_obs_annual <- swe_obs_m[,
+        {
+            mat <- as.matrix(.SD)
+            means <- colMeans(mat, na.rm = TRUE)
+            .(swe_mean = sum(means * w_swe, na.rm = TRUE))
+        },
+        by = year,
+        .SDcols = swe_catch_cols
+    ]
+    swe_obs_annual[, source := "GlobSnow v3.0"]
+
+    swe_mod_annual <- swe_mod_m[,
+        {
+            mat <- as.matrix(.SD)
+            means <- colMeans(mat, na.rm = TRUE)
+            .(swe_mean = sum(means * w_swe, na.rm = TRUE))
+        },
+        by = year,
+        .SDcols = swe_catch_cols
+    ]
+    swe_mod_annual[, source := "LISFLOOD"]
+
+    swe_combined <- rbind(swe_obs_annual, swe_mod_annual)
+
+    p_swe_comp <- ggplot(swe_combined, aes(x = year, y = swe_mean, color = source)) +
+        geom_line(linewidth = 0.7) +
+        geom_smooth(method = "loess", span = 0.4, se = FALSE, linewidth = 0.9) +
+        scale_color_manual(values = c("LISFLOOD" = "steelblue", "GlobSnow v3.0" = "#2166AC")) +
+        labs(
+            title = "Continental mean SWE \u2014 LISFLOOD vs GlobSnow",
+            x = NULL, y = "Annual mean SWE (mm)",
+            color = NULL
+        ) +
+        theme_minimal(base_size = 12) +
+        theme(
+            plot.title = element_text(face = "bold", size = 13),
+            legend.position = "bottom"
+        )
+
+    ggsave(file.path(out_dir, "Figure4e_SWE_LISFLOOD_vs_GlobSnow.png"),
+        p_swe_comp,
+        width = 10, height = 5, dpi = 200
+    )
+    cat("  -> Saved Figure 4e (SWE comparison).\n")
+} else {
+    cat("  SWE homogenized files not found, skipping.\n")
+}
 
 # =============================================================================
 # FIGURE 4d — Continental mean root zone soil moisture (annual)

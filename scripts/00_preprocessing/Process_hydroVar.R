@@ -119,6 +119,58 @@ time       <- Rain_raw$V1
 timeStampX <- time[order(time)]
 
 
+#' Process a hydrological variable: aggregate, summarize, and map
+#'
+#' Loads a raw time-series file for a hydrological variable (e.g., runoff,
+#' soil moisture) at multiple catchment outlets, aggregates it to several
+#' temporal resolutions (daily, 7-day, 14-day, monthly, annual), writes the
+#' resulting tables to disk, and optionally produces a choropleth map of
+#' mean annual values across catchments.
+#'
+#' @param var_name       Character. Name of the variable being processed
+#'                        (used in messages, output file names, and plot titles).
+#' @param file_path      Character. Path to the input data file (read with fread).
+#'                        Expected to contain one column per outlet/catchment,
+#'                        with rows corresponding to time steps in `time`.
+#' @param cnames         Character vector. Names of the outlet/catchment columns
+#'                        to keep from the input file.
+#' @param catchments_plot sf object. Catchment polygons/points to which the
+#'                        computed mean annual values will be attached and plotted.
+#' @param time           POSIXct/Date vector. Time index for each row of `dt`,
+#'                        used to build daily/weekly/monthly aggregation keys
+#'                        (used unless `time_override` is supplied).
+#' @param basemap        sf object. Background map layer used in the plot.
+#' @param nco             Matrix/data.frame with at least 2 columns giving the
+#'                        node/outlet coordinates, used to set the plot's
+#'                        x/y (lon/lat) limits.
+#' @param regimeDir      Character. Root directory under which "data/aggregates/"
+#'                        and "plots/" subfolders are created for outputs.
+#' @param palette        Character. hcl.colors() palette name for the map fill scale.
+#' @param rev_palette    Logical. Whether to reverse the palette.
+#' @param legend_label   Character or NULL. Legend title for the map; if NULL,
+#'                        a default label is generated from `var_name`.
+#' @param plot_limits    Numeric vector of length 2 or NULL. Fill scale limits.
+#' @param plot_breaks    Numeric vector or waiver(). Fill scale breaks.
+#' @param time_col       Character. (Currently unused placeholder) name of the
+#'                        time column, kept for interface compatibility.
+#' @param save_plot      Logical. If TRUE, generate and save the mean annual map.
+#' @param sm             Logical. If TRUE, aggregate using mean (state variable,
+#'                        e.g. soil moisture); if FALSE, aggregate using sum
+#'                        (flux variable, e.g. runoff).
+#' @param time_override  Optional vector of timestamps to use instead of `time`
+#'                        (e.g., if a variable has its own time index).
+#'
+#' @return Invisibly, a list containing:
+#'   \item{mean_annual}{Named vector of mean annual values per catchment}
+#'   \item{daily_means}{Long-term daily climatology (mean by day-of-year)}
+#'   \item{daily_totals}{Daily aggregates for every year}
+#'   \item{week7_totals}{7-day window aggregates for every year}
+#'   \item{week14_totals}{14-day window aggregates for every year}
+#'   \item{monthly_means}{Long-term monthly climatology}
+#'   \item{monthly_totals}{Monthly aggregates for every year}
+#'
+#' Side effects: writes several CSV files to `regimeDir/data/aggregates/<var_name>/`
+#' and (if save_plot = TRUE) a PNG map to `regimeDir/plots/`.
 process_hydro_variable <- function(var_name,
                                    file_path,
                                    cnames,

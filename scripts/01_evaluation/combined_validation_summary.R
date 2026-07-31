@@ -36,22 +36,22 @@ sm_stats_dir <- "Z:/ClimateRun4/nahaUsers/tilloal/SoilMositure_2026_06_03/2.Dieg
 # --- AET ---
 aet_stats <- fread(file.path(base_dir, "output/aet_diego/2.stats/stats_all_windows.csv"))
 aet_stats$variable <- "AET"
-aet_stats[scenario == "15-Day", scenario := "14-Day"]
+aet_stats[scenario == "15-Day", scenario := "15-Day"]
 
 # --- SWE ---
-swe_stats <- fread(file.path(base_dir, "output/swe_diego/2.stats/stats_all_windows.csv"))
+swe_stats <- fread(file.path(base_dir, "output/swe_diego/2.stats/stats_all_windows_snowcat.csv"))
 swe_stats$variable <- "SWE"
-swe_stats[scenario == "15-Day", scenario := "14-Day"]
+swe_stats[scenario == "15-Day", scenario := "15-Day"]
 
 # --- Soil Moisture (from RDS on network drive) ---
 if (dir.exists(sm_stats_dir)) {
-  sm_daily <- readRDS(file.path(sm_stats_dir, "stats_daily.rds"))
-  sm_7d <- readRDS(file.path(sm_stats_dir, "stats_7d.rds"))
-  sm_15d <- readRDS(file.path(sm_stats_dir, "stats_15d.rds"))
-  sm_month <- readRDS(file.path(sm_stats_dir, "stats_month.rds"))
+  sm_daily <- readRDS(file.path(sm_stats_dir, "stats_daily_snowmasked.rds"))
+  sm_7d <- readRDS(file.path(sm_stats_dir, "stats_7d_snowmasked.rds"))
+  sm_15d <- readRDS(file.path(sm_stats_dir, "stats_15d_snowmasked.rds"))
+  sm_month <- readRDS(file.path(sm_stats_dir, "stats_30d_snowmasked.rds"))
   sm_daily$scenario <- "Daily"
   sm_7d$scenario <- "7-Day"
-  sm_15d$scenario <- "14-Day"
+  sm_15d$scenario <- "15-Day"
   sm_month$scenario <- "Monthly"
   sm_stats <- rbindlist(list(sm_daily, sm_7d, sm_15d, sm_month), fill = TRUE)
   sm_stats$variable <- "Soil Moisture"
@@ -92,7 +92,7 @@ all_stats <- rbindlist(list(
 
 all_stats <- all_stats[!is.na(rho)]
 all_stats$scenario <- factor(all_stats$scenario,
-  levels = c("Daily", "7-Day", "14-Day", "Monthly")
+  levels = c("Daily", "7-Day", "15-Day", "Monthly")
 )
 all_stats$variable <- factor(all_stats$variable,
   levels = c("Discharge", "AET", "Soil Moisture", "SWE")
@@ -204,28 +204,7 @@ fig_a <- ggplot(all_stats, aes(x = scenario, y = rho, fill = scenario)) +
   )
 
 
-# ===========================================================================
-# 5. SAVE FIGURES
-# ===========================================================================
-path_out <- file.path(base_dir, "output", "combined_validation")
-dir.create(path_out, recursive = TRUE, showWarnings = FALSE)
 
-# Main figure: faceted violin + box
-ggsave(file.path(path_out, "Fig_combined_rho_violin.png"), fig_main,
-  width = 28, height = 12, units = "cm", dpi = 300, bg = "white"
-)
-
-# Ridge alternative (if ggridges available)
-if (exists("fig_ridge")) {
-  ggsave(file.path(path_out, "Fig_combined_rho_ridge.png"), fig_ridge,
-    width = 28, height = 12, units = "cm", dpi = 300, bg = "white"
-  )
-}
-
-# Summary table
-fwrite(summary_tbl, file.path(path_out, "summary_rho_all_variables.csv"))
-
-cat(sprintf("\nDone. Figures saved in: %s\n", path_out))
 
 # ===========================================================================
 # 6. FIGURE B: Climate-stratified heatmap (median rho per variable x climate x window)
@@ -235,11 +214,13 @@ heat_dt <- all_stats[!is.na(clim_class), .(
   median_rho = round(median(rho, na.rm = TRUE), 2)
 ), by = .(variable, clim_class, scenario)]
 
+palet <- hcl.colors(11, palette = "RdYlBu", rev = F)
+
 fig_b <- ggplot(heat_dt, aes(x = scenario, y = clim_class, fill = median_rho)) +
   geom_tile(colour = "white", linewidth = 0.5) +
   geom_text(aes(label = sprintf("%.2f", median_rho)), size = 2.5, fontface = "bold") +
   scale_fill_gradientn(
-    colours = c("#d73027", "#fc8d59", "#fee090", "#ffffbf", "#d9ef8b", "#91cf60", "#1a9850"),
+    colours = palet,
     limits = c(0, 1), oob = squish, name = "Median \u03c1"
   ) +
   facet_wrap(~variable, nrow = 1) +
@@ -247,10 +228,12 @@ fig_b <- ggplot(heat_dt, aes(x = scenario, y = clim_class, fill = median_rho)) +
     title = "Median Spearman \u03c1 by climate zone, variable, and aggregation",
     x = "Temporal aggregation", y = "Climate zone"
   ) +
-  theme_nature(9) +
+  theme_bw(15) +
   theme(
     axis.text.x = element_text(angle = 30, hjust = 1),
-    strip.text = element_text(size = 10)
+    strip.text = element_text(size = 14, color = "white"), # Optional: Makes text white for contrast
+    strip.background = element_rect(fill = "#2c3e50"), # Changes the background behind "discharge", "AET", etc.
+    panel.grid = element_blank()
   )
 
 # ===========================================================================
@@ -372,7 +355,7 @@ fig_paper <- (fig_a / fig_b / fig_c) +
     title = "HERA cross-variable validation summary",
     theme = theme(plot.title = element_text(face = "bold", size = 14))
   )
-ggsave(file.path(path_out, "Fig_combined_paper.png"), fig_paper,
+ggsave(file.path(path_out, "Fig_combined_paper_v2.png"), fig_paper,
   width = 30, height = 36, units = "cm", dpi = 300, bg = "white"
 )
 

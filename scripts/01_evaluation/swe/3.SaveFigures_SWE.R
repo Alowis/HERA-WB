@@ -45,11 +45,13 @@ norm_id <- function(x) {
 # 1. LOAD STATS + TIME SERIES + CATCHMENTS -------------------------
 message("Loading stats, time series and catchments...")
 swe_ts <- readRDS(file.path(path_stats, "SWE_time_series_all_scenarios.rds"))
-stats_daily <- readRDS(file.path(path_stats, "stats_daily.rds"))
-stats_7d <- readRDS(file.path(path_stats, "stats_7d.rds"))
-stats_15d <- readRDS(file.path(path_stats, "stats_15d.rds"))
-stats_month <- readRDS(file.path(path_stats, "stats_month.rds"))
+stats_daily <- readRDS(file.path(path_stats, "stats_daily_snow_filtered.rds"))
+stats_7d <- readRDS(file.path(path_stats, "stats_7d_snow_filtered.rds"))
+stats_15d <- readRDS(file.path(path_stats, "stats_15d_snow_filtered.rds"))
+stats_month <- readRDS(file.path(path_stats, "stats_month_snow_filtered.rds"))
+snow_flat <- readRDS(file.path(path_stats, "snow_filter.rds"))
 
+median(stats_15d$rho,na.rm=T)
 shp <- st_read(file_shp, quiet = TRUE)
 shp$join_id <- norm_id(shp$catch_id)
 
@@ -139,9 +141,13 @@ all_meta <- bind_rows(
 message("Building scatter table...")
 clim_lut_dt <- as.data.table(meta_lut)[, .(id_key = join_id, clim_class)]
 
-build_scatter_dt <- function(obs_wide, mod_wide, label) {
+build_scatter_dt <- function(obs_wide, mod_wide, label,snow_flat=NA) {
     obs_wide <- as.data.table(obs_wide)
     mod_wide <- as.data.table(mod_wide)
+    if(length(snow_flat)>1){
+         obs_wide=obs_wide[, c("date", snow_flat), with = FALSE]
+         mod_wide=mod_wide[, c("date", snow_flat), with = FALSE]
+    }
     o <- melt(obs_wide, id.vars = "date", variable.name = "id_key", value.name = "obs")
     m <- melt(mod_wide, id.vars = "date", variable.name = "id_key", value.name = "mod")
     o[, id_key := as.character(id_key)]
@@ -155,17 +161,17 @@ build_scatter_dt <- function(obs_wide, mod_wide, label) {
 }
 
 plot_dt <- rbind(
-    build_scatter_dt(swe_ts$daily$obs, swe_ts$daily$mod, "a) Daily"),
-    build_scatter_dt(swe_ts$`7d`$obs, swe_ts$`7d`$mod, "b) 7-Day"),
-    build_scatter_dt(swe_ts$`15d`$obs, swe_ts$`15d`$mod, "c) 15-Day"),
-    build_scatter_dt(swe_ts$monthly$obs, swe_ts$monthly$mod, "d) Monthly")
+    build_scatter_dt(obs_wide=swe_ts$daily$obs, mod_wide=swe_ts$daily$mod, "a) Daily",snow_flat),
+    build_scatter_dt(obs_wide=swe_ts$`7d`$obs, mod_wide=swe_ts$`7d`$mod, "b) 7-Day",snow_flat),
+    build_scatter_dt(obs_wide=swe_ts$`15d`$obs, mod_wide=swe_ts$`15d`$mod, "c) 15-Day",snow_flat),
+    build_scatter_dt(obs_wide=swe_ts$monthly$obs, mod_wide=swe_ts$monthly$mod, "d) Monthly",snow_flat)
 )
 plot_dt[, scenario := factor(scenario, levels = c("a) Daily", "b) 7-Day", "c) 15-Day", "d) Monthly"))]
 plot_dt[, clim_class := factor(clim_class, levels = c("Polar", "Cold", "Temperate", "Arid", "Tropical"))]
 
 ax_lim <- range(
-    quantile(plot_dt$mod, probs = c(0.02, 0.98), na.rm = TRUE),
-    quantile(plot_dt$obs, probs = c(0.02, 0.98), na.rm = TRUE)
+    quantile(plot_dt$mod, probs = c(0.01, 0.999), na.rm = TRUE),
+    quantile(plot_dt$obs, probs = c(0.01, 0.999), na.rm = TRUE)
 )
 
 ann <- plot_dt[!is.na(clim_class), .(
@@ -176,10 +182,18 @@ ann[, label := paste0("\u03c1 = ", rho, "\nn = ", format(n, big.mark = ","))]
 
 set.seed(42)
 plot_dt_sub <- plot_dt[!is.na(clim_class),
-    .SD[sample(.N, min(.N, 3000L))],
+    .SD[sample(.N, min(.N, 100000L))],
     by = .(scenario, clim_class)
 ]
-
+set.seed(42)
+plot_dt_sub <- plot_dt[!is.na(clim_class),
+                       {
+                         tmp <- copy(.SD)
+                         tmp[, xbin := cut(mod, breaks = 100)]
+                         tmp[, .SD[sample(.N, min(.N, 500L))], by = xbin]
+                       },
+                       by = .(scenario, clim_class)
+]
 # 5. THEME + PALETTES ----------------------------------------------
 theme_nature <- function(base_size = 9) {
     theme_bw(base_size = base_size) %+replace%
@@ -247,14 +261,14 @@ fig0 <- (build_map(map_d, "a) Daily") + build_map(map_7, "b) 7-Day Moving Mean")
     plot_layout(ncol = 4, guides = "collect") &
     theme(legend.position = "bottom")
 fig0 <- fig0 + plot_annotation(
-    title = "SWE cross-comparison: LISFLOOD vs GlobSnow (Spearman \u03c1)",
+    title = "SWE cross-comparison: HERA-WB vs GlobSnow (Spearman \u03c1)",
     subtitle = "Grey = no Globsnow",
     theme = theme(
         plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
         plot.subtitle = element_text(size = 9, colour = "grey30", hjust = 0.5)
     )
 )
-ggsave(file.path(path_out, "Fig0_SWE_spatial_rho.png"), fig0,
+ggsave(file.path(path_out, "Fig0_SWE_spatial_rho_v2.png"), fig0,
     width = 40, height = 13, units = "cm", dpi = 300, bg = "white"
 )
 
@@ -283,7 +297,7 @@ fig1 <- ggplot(all_meta, aes(scenario, rho, fill = scenario)) +
     scale_y_continuous(limits = c(-0.35, 1.02), breaks = seq(-0.25, 1, 0.25)) +
     labs(title = "Fig. 1 | Spearman \u03c1 across temporal aggregations (SWE)", x = NULL, y = "Spearman \u03c1") +
     theme_nature()
-ggsave(file.path(path_out, "Fig1_SWE_rho_violin.png"), fig1,
+ggsave(file.path(path_out, "Fig1_SWE_rho_violin_v2.png"), fig1,
     width = 16, height = 12, units = "cm", dpi = 300, bg = "white"
 )
 
@@ -320,7 +334,7 @@ fig2 <- ggplot(plot_dt_sub, aes(mod, obs, colour = clim_class)) +
     ) +
     theme_nature() +
     theme(legend.position = "bottom", panel.spacing = unit(1.0, "lines"))
-ggsave(file.path(path_out, "Fig2_SWE_scatter_climate.png"), fig2,
+ggsave(file.path(path_out, "Fig2_SWE_scatter_climate_v2.png"), fig2,
     width = 22, height = 10, units = "cm", dpi = 300, bg = "white"
 )
 
@@ -329,7 +343,7 @@ message("Fig 3: scatter matrix...")
 fig3 <- ggplot(plot_dt_sub, aes(mod, obs, colour = clim_class)) +
     geom_abline(slope = 1, intercept = 0, colour = "grey55", linetype = "longdash", linewidth = 0.3) +
     geom_point(alpha = 0.50, size = 0.8, stroke = 0, shape = 16) +
-    geom_smooth(aes(group = clim_class), method = "lm", formula = y ~ x, se = FALSE, colour = "grey15", linewidth = 0.7) +
+    geom_smooth(aes(group = clim_class), method = "loess", se = FALSE, colour = "grey15", linewidth = 0.7) +
     geom_text(
         data = ann, aes(label = label),
         x = ax_lim[1] + diff(ax_lim) * 0.04, y = ax_lim[2] - diff(ax_lim) * 0.04,
@@ -349,7 +363,9 @@ fig3 <- ggplot(plot_dt_sub, aes(mod, obs, colour = clim_class)) +
         panel.spacing = unit(0.5, "lines"),
         strip.text.y = element_text(angle = 0, face = "bold")
     )
-ggsave(file.path(path_out, "Fig3_SWE_scatter_matrix.png"), fig3,
+
+
+ggsave(file.path(path_out, "Fig3_SWE_scatter_matrix_v2.png"), fig3,
     width = 26, height = 24, units = "cm", dpi = 300, bg = "white"
 )
 
@@ -375,7 +391,7 @@ p4b <- make_strat_box(filter(all_meta, !is.na(area_class)), "area_class", "scena
 p4c <- make_strat_box(filter(all_meta, !is.na(elev_class)), "elev_class", "scenario", scen_pal, "Aggregation", "Elevation class", "c", TRUE)
 fig4 <- (p4a / (p4b + p4c)) +
     plot_annotation(title = "Fig. 4 | SWE agreement stratified by catchment characteristics")
-ggsave(file.path(path_out, "Fig4_SWE_stratified.png"), fig4,
+ggsave(file.path(path_out, "Fig4_SWE_stratified_v2.png"), fig4,
     width = 20, height = 20, units = "cm", dpi = 300, bg = "white"
 )
 
@@ -449,7 +465,7 @@ fig6 <- ggplot(gain_dt, aes(aggregation, stratum, fill = delta_rho)) +
     ) +
     theme_nature() +
     theme(strip.placement = "outside", strip.text.y.left = element_text(angle = 0, face = "bold"))
-ggsave(file.path(path_out, "Fig6_SWE_aggregation_gain.png"), fig6,
+ggsave(file.path(path_out, "Fig6_SWE_aggregation_gain_v2.png"), fig6,
     width = 18, height = 16, units = "cm", dpi = 300, bg = "white"
 )
 
@@ -498,7 +514,7 @@ p_scatter <- ggplot(scatter_df, aes(x = mean_swe, y = rho)) +
   geom_point(alpha = 0.5, size = 1.5, color = "steelblue") +
   geom_smooth(method = "loess", se = TRUE, color = "darkblue") +
   labs(
-    title = "Correlation (rho) vs HERA-WC mean yearly SWE per catchment",
+    title = "Correlation (rho) vs HERA-WB mean yearly SWE per catchment",
     x = "Mean yearly SWE (mm)",
     y = expression("Monthly" ~ rho)
   ) +
@@ -508,7 +524,7 @@ p_scatter <- ggplot(scatter_df, aes(x = mean_swe, y = rho)) +
 
 p_scatter
 
-ggsave(file.path(path_out, "FigS_rho_vs_SWE.png"), p_scatter,
+ggsave(file.path(path_out, "FigS_rho_vs_SWE_v2.png"), p_scatter,
        width = 18, height = 16, units = "cm", dpi = 300, bg = "white"
 )
 
