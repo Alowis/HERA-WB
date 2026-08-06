@@ -40,7 +40,7 @@ all_variables <- list(
 # --- Choose which variables to process ----------------------------------------
 # Set to NULL to process ALL, or provide a character vector of names to process
 # Example: process_only <- c("rainfall", "snowfall", "theta3")
-process_only <- c("prefflow") # NULL = process all
+process_only <- c("discharge") # NULL = process all
 
 if (!is.null(process_only)) {
     variables <- all_variables[sapply(all_variables, function(v) v$name %in% process_only)]

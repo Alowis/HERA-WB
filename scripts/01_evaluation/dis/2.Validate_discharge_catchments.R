@@ -54,7 +54,7 @@ if (!file.exists(matching_path)) {
     )
 }
 matches <- read.csv(matching_path, stringsAsFactors = FALSE)
-length(unique(matches$catch_id[which(matches$match_type=="relaxed")]))
+length(unique(matches$catch_id[which(matches$match_type == "relaxed")]))
 
 cat("[1/5] Loading matching table and discharge data...\n")
 cat(sprintf("  Matched pairs loaded: %d\n", nrow(matches)))
@@ -157,48 +157,48 @@ compute_spearman <- function(x, y) {
 }
 
 compute_spearman <- function(mat_obs, mat_mod, ids) {
-  rbindlist(lapply(ids, function(id) {
-    x <- mat_mod[[id]]
-    y <- mat_obs[[id]]
-    valid_idx <- which(!is.na(x) & !is.na(y))
-    n=length(valid_idx)
-    
-    if (length(valid_idx) < 10 || all(is.na(y)) || all(is.na(x))) {
-      return(list(
-        catch_id = id, rho = NA_real_, p_val = NA_real_,
-        n_eff = NA_real_, status = "No Data"
-      ))
-    }
-    
-    xv <- x[valid_idx]
-    yv <- y[valid_idx]
-    n <- length(xv)
-    
-    if (sd(xv) == 0 || sd(yv) == 0) {
-      return(list(
-        catch_id = id, rho = NA_real_, p_val = NA_real_,
-        n_eff = NA_real_, status = "No Variance"
-      ))
-    }
-    
-    rho <- cor(xv, yv, method = "spearman")
-    
-    r1x <- cor(xv[-n], xv[-1], use = "complete.obs")
-    r1y <- cor(yv[-n], yv[-1], use = "complete.obs")
-    r1 <- mean(c(r1x, r1y), na.rm = TRUE)
-    r1 <- max(0, r1)
-    
-    n_eff <- max(3, floor(n * (1 - r1) / (1 + r1)))
-    t_stat <- rho * sqrt((n_eff - 2) / (1 - rho^2))
-    p_corr <- 2 * pt(abs(t_stat), df = n_eff - 2, lower.tail = FALSE)
-    
-    status <- if (is.na(p_corr) || p_corr >= 0.05) "Not Significant" else "Significant"
-    
-    list(
-      catch_id = id, rho = round(rho, 2), p_val = p_corr, n_obs = n,
-      mean_obs = mean(yv), mean_sim = mean(xv), n_eff = n_eff, status = status
-    )
-  }))
+    rbindlist(lapply(ids, function(id) {
+        x <- mat_mod[[id]]
+        y <- mat_obs[[id]]
+        valid_idx <- which(!is.na(x) & !is.na(y))
+        n <- length(valid_idx)
+
+        if (length(valid_idx) < 10 || all(is.na(y)) || all(is.na(x))) {
+            return(list(
+                catch_id = id, rho = NA_real_, p_val = NA_real_,
+                n_eff = NA_real_, status = "No Data"
+            ))
+        }
+
+        xv <- x[valid_idx]
+        yv <- y[valid_idx]
+        n <- length(xv)
+
+        if (sd(xv) == 0 || sd(yv) == 0) {
+            return(list(
+                catch_id = id, rho = NA_real_, p_val = NA_real_,
+                n_eff = NA_real_, status = "No Variance"
+            ))
+        }
+
+        rho <- cor(xv, yv, method = "spearman")
+
+        r1x <- cor(xv[-n], xv[-1], use = "complete.obs")
+        r1y <- cor(yv[-n], yv[-1], use = "complete.obs")
+        r1 <- mean(c(r1x, r1y), na.rm = TRUE)
+        r1 <- max(0, r1)
+
+        n_eff <- max(3, floor(n * (1 - r1) / (1 + r1)))
+        t_stat <- rho * sqrt((n_eff - 2) / (1 - rho^2))
+        p_corr <- 2 * pt(abs(t_stat), df = n_eff - 2, lower.tail = FALSE)
+
+        status <- if (is.na(p_corr) || p_corr >= 0.05) "Not Significant" else "Significant"
+
+        list(
+            catch_id = id, rho = round(rho, 2), p_val = p_corr, n_obs = n,
+            mean_obs = mean(yv), mean_sim = mean(xv), n_eff = n_eff, status = status
+        )
+    }))
 }
 # ---------------------------------------------------------------------------
 # Function to compute per-station correlations with optional smoothing
@@ -284,7 +284,7 @@ compute_all_stations <- function(matches, Q_sim, Station_sim_IDs, Q_cor,
 
         # Apply rolling mean smoothing if k > 1
         sim_final <- data.table(paired$sim)
-        obs_final <- data.table(paired$obs) 
+        obs_final <- data.table(paired$obs)
         if (k > 1) {
             obs_final[, agg := (seq_len(.N) - 1) %/% k]
             sim_final[, agg := (seq_len(.N) - 1) %/% k]
@@ -296,8 +296,8 @@ compute_all_stations <- function(matches, Q_sim, Station_sim_IDs, Q_cor,
 
         # Compute Spearman
         daily_cols <- setdiff(names(sim_final), "agg")
-        sp <- compute_spearman(sim_final, obs_final,daily_cols)
-        sp$catch_id=cid
+        sp <- compute_spearman(sim_final, obs_final, daily_cols)
+        sp$catch_id <- cid
 
         station_results[[i]] <- data.frame(
             catch_id = cid, station_id = sid, match_type = mtype,
@@ -467,7 +467,7 @@ catchment_summary_30d$scenario <- "Monthly"
 
 catchment_summary_all <- rbind(
     catchment_summary, catchment_summary_7d,
-    catchment_summary_14d, catchment_summary_30d
+    catchment_summary_15d, catchment_summary_30d
 )
 catchment_summary_all$scenario <- factor(catchment_summary_all$scenario,
     levels = c("Daily", "7-Day", "15-Day", "Monthly")
@@ -482,14 +482,14 @@ cat(sprintf(
     sum(catchment_summary$n_stations > 1)
 ))
 
-median(catchment_summary$spearman_rho[which(catchment_summary$match_type=="strict")])
-length(which(catchment_summary$spearman_rho[which(catchment_summary$match_type=="strict")]>0.5))/
-  length(catchment_summary$spearman_rho[which(catchment_summary$match_type=="strict")])
+median(catchment_summary$spearman_rho[which(catchment_summary$match_type == "strict")])
+length(which(catchment_summary$spearman_rho[which(catchment_summary$match_type == "strict")] > 0.5)) /
+    length(catchment_summary$spearman_rho[which(catchment_summary$match_type == "strict")])
 
 
-median(catchment_summary$spearman_rho[which(catchment_summary$match_type=="relaxed")])
-length(which(catchment_summary$spearman_rho[which(catchment_summary$match_type=="relaxed")]>0.5))/
-  length(catchment_summary$spearman_rho[which(catchment_summary$match_type=="relaxed")])
+median(catchment_summary$spearman_rho[which(catchment_summary$match_type == "relaxed")])
+length(which(catchment_summary$spearman_rho[which(catchment_summary$match_type == "relaxed")] > 0.5)) /
+    length(catchment_summary$spearman_rho[which(catchment_summary$match_type == "relaxed")])
 # ===========================================================================
 # SECTION 5: Export CSVs
 # ===========================================================================
@@ -626,7 +626,7 @@ attach_meta <- function(stats_df, label) {
 all_meta <- bind_rows(
     attach_meta(catchment_summary, "Daily"),
     attach_meta(catchment_summary_7d, "7-Day"),
-    attach_meta(catchment_summary_14d, "14-Day"),
+    attach_meta(catchment_summary_15d, "14-Day"),
     attach_meta(catchment_summary_30d, "Monthly")
 ) %>% mutate(scenario = factor(scenario, levels = c("Daily", "7-Day", "14-Day", "Monthly")))
 
@@ -710,7 +710,7 @@ build_point_map <- function(sdf, ttl) {
 }
 fig0 <- (build_point_map(station_df, "a) Daily") +
     build_point_map(station_df_7d, "b) 7-Day Moving Mean")) /
-    (build_point_map(station_df_14d, "c) 14-Day Moving Mean") +
+    (build_point_map(station_df_15d, "c) 14-Day Moving Mean") +
         build_point_map(station_df_30d, "d) Monthly")) +
     plot_layout(guides = "collect") &
     theme(legend.position = "right")
@@ -872,3 +872,186 @@ data.table::fwrite(tbl("area_class"), file.path(path_out, "Table_rho_by_area.csv
 data.table::fwrite(tbl("elev_class"), file.path(path_out, "Table_rho_by_elevation.csv"))
 
 message("Done. Figures + tables in: ", path_out)
+
+# =============================================================================
+# REGIME, ANOMALIES, PEARSON EXTREMES, AND NRMSE (per station)
+# =============================================================================
+
+# 5b. REGIME SPEARMAN (per station) -----------------------------------------
+message("Computing regime (mean DOY cycle) per station...")
+
+RegimeFast <- function(data) {
+    names(data) <- c("date", "Q")
+    jours <- as.numeric(format(data$date, "%j"))
+    ind.j <- tapply(seq(length(jours)), jours, c)
+    ind.j <- ind.j[-366] # remove day 366 (leap years)
+    Qc <- data.frame(
+        date = as.numeric(names(ind.j)),
+        mean = sapply(ind.j, function(x) mean(data$Q[x], na.rm = TRUE))
+    )
+    return(Qc)
+}
+
+compute_station_regime_nrmse <- function(matches, Q_sim, Station_sim_IDs, Q_cor,
+                                         Station_cor_IDs, Q_data, Station_obs_IDs,
+                                         date_sim, date_obs, date_cor,
+                                         rm_obs, has_corrected) {
+    station_results <- vector("list", nrow(matches))
+
+    for (i in seq_len(nrow(matches))) {
+        cid <- as.character(matches$catch_id[i])
+        sid <- as.numeric(matches$station_id[i])
+
+        # Determine simulated source
+        use_corrected <- has_corrected && (sid %in% Station_cor_IDs)
+
+        if (use_corrected) {
+            sim_col_idx <- which(Station_cor_IDs == sid)
+        } else {
+            sim_col_idx <- which(Station_sim_IDs == sid)
+        }
+        obs_col_idx <- which(Station_obs_IDs == sid)
+
+        if (length(sim_col_idx) == 0 || length(obs_col_idx) == 0) {
+            station_results[[i]] <- data.frame(
+                catch_id = cid, station_id = sid,
+                regime_rho = NA, regime_p_val = NA,
+                nrmse_daily = NA, pearson_top20 = NA, pearson_bot20 = NA,
+                stringsAsFactors = FALSE
+            )
+            next
+        }
+
+        # Extract time series
+        if (use_corrected) {
+            sim_vec <- as.numeric(Q_cor[, sim_col_idx[1]])
+            sim_dates <- date_cor
+        } else {
+            sim_vec <- as.numeric(Q_sim[, sim_col_idx[1]])
+            sim_dates <- date_sim
+        }
+
+        obs_vec <- as.numeric(Q_data[-rm_obs, obs_col_idx[1] + 1])
+        obs_dates <- date_obs
+
+        # Build paired data.table
+        dt_sim <- data.table(date = sim_dates, sim = sim_vec)
+        dt_obs <- data.table(date = obs_dates, obs = obs_vec)
+        paired <- merge(dt_sim, dt_obs, by = "date", all = FALSE)
+        paired <- paired[!is.na(sim) & !is.na(obs)]
+
+        if (nrow(paired) < 365) {
+            station_results[[i]] <- data.frame(
+                catch_id = cid, station_id = sid,
+                regime_rho = NA, regime_p_val = NA,
+                nrmse_daily = NA, pearson_top20 = NA, pearson_bot20 = NA,
+                stringsAsFactors = FALSE
+            )
+            next
+        }
+
+        # --- REGIME ---
+        obs_ts <- data.frame(date = paired$date, Q = paired$obs)
+        mod_ts <- data.frame(date = paired$date, Q = paired$sim)
+
+        obs_regime <- tryCatch(RegimeFast(obs_ts), error = function(e) NULL)
+        mod_regime <- tryCatch(RegimeFast(mod_ts), error = function(e) NULL)
+
+        regime_rho <- NA_real_
+        regime_p <- NA_real_
+        if (!is.null(obs_regime) && !is.null(mod_regime)) {
+            reg <- merge(obs_regime, mod_regime, by = "date", suffixes = c("_obs", "_mod"))
+            vi <- which(!is.na(reg$mean_obs) & !is.na(reg$mean_mod))
+            if (length(vi) >= 10 && sd(reg$mean_obs[vi]) > 0 && sd(reg$mean_mod[vi]) > 0) {
+                regime_rho <- cor(reg$mean_mod[vi], reg$mean_obs[vi], method = "spearman")
+                n <- length(vi)
+                r1x <- cor(reg$mean_mod[vi][-n], reg$mean_mod[vi][-1], use = "complete.obs")
+                r1y <- cor(reg$mean_obs[vi][-n], reg$mean_obs[vi][-1], use = "complete.obs")
+                r1 <- max(0, mean(c(r1x, r1y), na.rm = TRUE))
+                n_eff <- max(3, floor(n * (1 - r1) / (1 + r1)))
+                t_stat <- regime_rho * sqrt((n_eff - 2) / (1 - regime_rho^2))
+                regime_p <- 2 * pt(abs(t_stat), df = n_eff - 2, lower.tail = FALSE)
+            }
+        }
+
+        # --- NRMSE ---
+        rmse_val <- sqrt(mean((paired$sim - paired$obs)^2))
+        sd_obs <- sd(paired$obs)
+        nrmse_val <- if (sd_obs > 0) rmse_val / sd_obs else NA_real_
+
+        # --- ANOMALIES (inverse normal transform) ---
+        n_obs <- nrow(paired)
+        p_obs <- rank(paired$obs, ties.method = "average") / (n_obs + 1)
+        p_sim <- rank(paired$sim, ties.method = "average") / (n_obs + 1)
+        anom_obs <- qnorm(p_obs)
+        anom_sim <- qnorm(p_sim)
+
+        # --- PEARSON ON TOP/BOTTOM 20% ---
+        q_lo <- quantile(anom_obs, 0.2)
+        q_hi <- quantile(anom_obs, 0.8)
+
+        idx_top <- which(anom_obs >= q_hi)
+        idx_bot <- which(anom_obs <= q_lo)
+
+        pearson_top <- if (length(idx_top) >= 5 && sd(anom_obs[idx_top]) > 0 && sd(anom_sim[idx_top]) > 0) {
+            cor(anom_obs[idx_top], anom_sim[idx_top], method = "spearman")
+        } else {
+            NA_real_
+        }
+
+        pearson_bot <- if (length(idx_bot) >= 5 && sd(anom_obs[idx_bot]) > 0 && sd(anom_sim[idx_bot]) > 0) {
+            cor(anom_obs[idx_bot], anom_sim[idx_bot], method = "spearman")
+        } else {
+            NA_real_
+        }
+
+        station_results[[i]] <- data.frame(
+            catch_id = cid, station_id = sid,
+            regime_rho = round(regime_rho, 4), regime_p_val = regime_p,
+            nrmse_daily = round(nrmse_val, 4),
+            pearson_top20 = round(pearson_top, 4),
+            pearson_bot20 = round(pearson_bot, 4),
+            stringsAsFactors = FALSE
+        )
+    }
+
+    do.call(rbind, station_results)
+}
+
+# Run the computation
+discharge_extra_metrics <- compute_station_regime_nrmse(
+    matches, Q_sim, Station_sim_IDs, Q_cor, Station_cor_IDs,
+    Q_data, Station_obs_IDs, date_sim, date_obs, date_cor,
+    rm_obs, has_corrected
+)
+
+# Save results
+out_dir_dis <- file.path(base_dir, "output", "discharge_diego", "2.stats")
+dir.create(out_dir_dis, recursive = TRUE, showWarnings = FALSE)
+
+write.csv(discharge_extra_metrics,
+    file = file.path(out_dir_dis, "discharge_regime_nrmse_pearson_extremes.csv"),
+    row.names = FALSE
+)
+saveRDS(discharge_extra_metrics, file.path(out_dir_dis, "discharge_extra_metrics.rds"))
+
+# Summary
+cat("\n  === EXTRA METRICS SUMMARY (Discharge) ===\n")
+cat(sprintf(
+    "  Median regime rho: %.3f\n",
+    median(discharge_extra_metrics$regime_rho, na.rm = TRUE)
+))
+cat(sprintf(
+    "  Median NRMSE: %.3f\n",
+    median(discharge_extra_metrics$nrmse_daily, na.rm = TRUE)
+))
+cat(sprintf(
+    "  Median Pearson top 20%%: %.3f\n",
+    median(discharge_extra_metrics$pearson_top20, na.rm = TRUE)
+))
+cat(sprintf(
+    "  Median Pearson bot 20%%: %.3f\n",
+    median(discharge_extra_metrics$pearson_bot20, na.rm = TRUE)
+))
+
+message("Discharge extra metrics (regime, NRMSE, Pearson extremes) saved in: ", out_dir_dis)
