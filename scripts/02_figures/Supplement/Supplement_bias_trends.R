@@ -26,7 +26,7 @@ source("R/load_workspace.R")
 # --- Paths --------------------------------------------------------------------
 base_dir <- "D:/tilloal/Documents/01_Projects/RegimeShifts/"
 gpkg_path <- file.path(base_dir, "data", "catchments_analysis_final_v3.gpkg")
-plots_dir <- file.path(base_dir, "output", "seasonal_comparison")
+plots_dir <- file.path(base_dir, "output", "figures")
 dir.create(plots_dir, showWarnings = FALSE, recursive = TRUE)
 
 # Homogenized data directories
@@ -185,20 +185,22 @@ seasonal_comparison <- function(obs_dt, mod_dt, var_name, obs_label, mod_label,
 
   # Remove incomplete years (keep only years with 12 months of data)
 
-  
+
   complete_years_obs <- obs_dt[, .N, by = year][N >= 360, year]
   complete_years_mod <- mod_dt[, .N, by = year][N >= 360, year]
   complete_years <- intersect(complete_years_obs, complete_years_mod)
-  
-  
+
+
   annual_obs <- obs_dt[year %in% complete_years, .(annual_mean = sum(
     sapply(common_cols, function(col) mean(.SD[[col]], na.rm = TRUE)) * weights,
-    na.rm = TRUE)), by = year, .SDcols = common_cols]
-  
+    na.rm = TRUE
+  )), by = year, .SDcols = common_cols]
+
   annual_mod <- mod_dt[year %in% complete_years, .(annual_mean = sum(
     sapply(common_cols, function(col) mean(.SD[[col]], na.rm = TRUE)) * weights,
-    na.rm = TRUE)), by = year, .SDcols = common_cols]
-  
+    na.rm = TRUE
+  )), by = year, .SDcols = common_cols]
+
 
   # Simpler approach: compute weighted mean per year
   annual_obs2 <- obs_dt[,
@@ -251,19 +253,19 @@ seasonal_comparison <- function(obs_dt, mod_dt, var_name, obs_label, mod_label,
 
 
 bias_trends_comparison <- function(obs_dt, mod_dt, var_name, obs_label, mod_label,
-                                y_label, color_obs = "firebrick",
-                                color_mod = "steelblue",dt="monthly") {
+                                   y_label, color_obs = "firebrick",
+                                   color_mod = "steelblue", dt = "monthly") {
   # Find common catchments
   meta <- c("date", "month", "year")
   obs_cols <- setdiff(names(obs_dt), meta)
   mod_cols <- setdiff(names(mod_dt), meta)
   common_cols <- intersect(obs_cols, mod_cols)
-  
+
   if (length(common_cols) < 10) {
     cat("  WARNING: Only", length(common_cols), "common catchments for", var_name, "\n")
   }
   cat("  Common catchments:", length(common_cols), "\n")
-  
+
   # Area weights
   catch_ids_clean <- sub("^X", "", common_cols)
   area_vec <- catchments$residual_area_km2[match(
@@ -271,8 +273,8 @@ bias_trends_comparison <- function(obs_dt, mod_dt, var_name, obs_label, mod_labe
   )]
   area_vec[is.na(area_vec)] <- 1
   weights <- area_vec / sum(area_vec, na.rm = TRUE)
-  
-  
+
+
   # Compute per-catchment bias per month
   bias_dt <- data.table(catch_id = common_cols)
   for (m in 1:12) {
@@ -280,14 +282,14 @@ bias_trends_comparison <- function(obs_dt, mod_dt, var_name, obs_label, mod_labe
     mod_means <- colMeans(as.matrix(mod_dt[month == m, ..common_cols]), na.rm = TRUE)
     bias_dt[, paste0("m", sprintf("%02d", m)) := mod_means - obs_means]
   }
-  
+
   # Plot 2: Bias violin + boxplot
   bias_long <- melt(bias_dt,
-                    id.vars = "catch_id",
-                    variable.name = "month_col", value.name = "bias"
+    id.vars = "catch_id",
+    variable.name = "month_col", value.name = "bias"
   )
   bias_long[, month := as.integer(sub("m", "", month_col))]
-  
+
   p_bias <- ggplot(bias_long, aes(x = factor(month), y = bias)) +
     geom_violin(alpha = 0.35, trim = FALSE, scale = "width", fill = "royalblue") +
     geom_boxplot(width = 0.12, outlier.shape = NA, fill = "white", fatten = 2) +
@@ -299,25 +301,25 @@ bias_trends_comparison <- function(obs_dt, mod_dt, var_name, obs_label, mod_labe
     ) +
     theme_minimal(base_size = 12) +
     theme(plot.title = element_text(face = "bold"))
-  
-  
+
+
   # --- Plot 3: Bias map (mean annual bias per catchment) --------------------
   bias_annual <- bias_dt[, .(mean_bias = rowMeans(.SD, na.rm = TRUE)),
-                         .SDcols = paste0("m", sprintf("%02d", 1:12))
+    .SDcols = paste0("m", sprintf("%02d", 1:12))
   ]
   bias_annual$catch_id <- as.character(as.numeric(sub("^X", "", bias_dt$catch_id)))
   cats_bias <- catchments_3035[as.character(as.numeric(catchments_3035$catch_id)) %in% bias_annual$catch_id, ]
-  cats_bias$catch_id=as.character(as.numeric(cats_bias$catch_id))
+  cats_bias$catch_id <- as.character(as.numeric(cats_bias$catch_id))
   cats_bias <- merge(cats_bias, bias_annual,
-                     by.x = "catch_id", by.y = "catch_id", all.x = FALSE
+    by.x = "catch_id", by.y = "catch_id", all.x = FALSE
   )
-  
+
   bias_lim <- quantile(abs(cats_bias$mean_bias), 0.95, na.rm = TRUE)
   palet_bias <- hcl.colors(11, palette = "RdBu", rev = F)
-  
+
   p_map <- ggplot() +
     geom_sf(data = basemap, fill = "grey95", color = "grey60", linewidth = 0.2) +
-    geom_sf(data = cats_bias, aes(fill = mean_bias), color = "gray44",linewidth = 0.02) +
+    geom_sf(data = cats_bias, aes(fill = mean_bias), color = "gray44", linewidth = 0.02) +
     scale_fill_gradientn(
       colors = palet_bias,
       limits = c(-bias_lim, bias_lim), oob = squish,
@@ -339,62 +341,64 @@ bias_trends_comparison <- function(obs_dt, mod_dt, var_name, obs_label, mod_labe
       plot.title = element_text(face = "bold", size = 12),
       legend.position = "right"
     )
-  
+
   # --- Plot 4: Continental temporal evolution (annual means) -----------------
   obs_dt[, year := year(date)]
   mod_dt[, year := year(date)]
-  
+
   obs_dt[["year"]]
   # Remove incomplete years (keep only years with 12 months of data)
-  
-  if(dt=="monthly") nm=12
-  if(dt=="daily") nm=360
-  
-  if(var_name=="SWE") nm=nm*0.6
-  
+
+  if (dt == "monthly") nm <- 12
+  if (dt == "daily") nm <- 360
+
+  if (var_name == "SWE") nm <- nm * 0.6
+
   complete_years_obs <- obs_dt[, .N, by = year][N >= nm, year]
   complete_years_mod <- mod_dt[, .N, by = year][N >= nm, year]
   complete_years <- intersect(complete_years_obs, complete_years_mod)
-  
-  
+
+
   annual_obs <- obs_dt[year %in% complete_years, .(annual_mean = sum(
     sapply(common_cols, function(col) mean(.SD[[col]], na.rm = TRUE)) * weights,
-    na.rm = TRUE)), by = year, .SDcols = common_cols]
-  
+    na.rm = TRUE
+  )), by = year, .SDcols = common_cols]
+
   annual_mod <- mod_dt[year %in% complete_years, .(annual_mean = sum(
     sapply(common_cols, function(col) mean(.SD[[col]], na.rm = TRUE)) * weights,
-    na.rm = TRUE)), by = year, .SDcols = common_cols]
-  
-  
+    na.rm = TRUE
+  )), by = year, .SDcols = common_cols]
+
+
   # Simpler approach: compute weighted mean per year
   annual_obs2 <- obs_dt[,
-                        {
-                          mat <- as.matrix(.SD)
-                          means <- colMeans(mat, na.rm = TRUE)
-                          .(val = sum(means * weights, na.rm = TRUE))
-                        },
-                        by = year,
-                        .SDcols = common_cols
+    {
+      mat <- as.matrix(.SD)
+      means <- colMeans(mat, na.rm = TRUE)
+      .(val = sum(means * weights, na.rm = TRUE))
+    },
+    by = year,
+    .SDcols = common_cols
   ]
   annual_obs[, source := obs_label]
-  
+
   annual_mod2 <- mod_dt[,
-                        {
-                          mat <- as.matrix(.SD)
-                          means <- colMeans(mat, na.rm = TRUE)
-                          .(val = sum(means * weights, na.rm = TRUE))
-                        },
-                        by = year,
-                        .SDcols = common_cols
+    {
+      mat <- as.matrix(.SD)
+      means <- colMeans(mat, na.rm = TRUE)
+      .(val = sum(means * weights, na.rm = TRUE))
+    },
+    by = year,
+    .SDcols = common_cols
   ]
   annual_mod[, source := mod_label]
-  
+
   annual_combined <- rbind(annual_obs, annual_mod)
-  maxo=max(annual_obs$annual_mean)
-  maxm=max(annual_mod$annual_mean)
-  bias=mean(annual_mod$annual_mean)/mean(annual_obs$annual_mean)
-  bias=(bias-1)*100
-  
+  maxo <- max(annual_obs$annual_mean)
+  maxm <- max(annual_mod$annual_mean)
+  bias <- mean(annual_mod$annual_mean) / mean(annual_obs$annual_mean)
+  bias <- (bias - 1) * 100
+
   p_temporal <- ggplot(annual_combined, aes(x = year, y = annual_mean, color = source)) +
     geom_line(linewidth = 0.7) +
     geom_smooth(method = "loess", span = 0.4, se = FALSE, linewidth = 1) +
@@ -406,9 +410,10 @@ bias_trends_comparison <- function(obs_dt, mod_dt, var_name, obs_label, mod_labe
       title = paste0("(a)"),
       x = NULL, y = y_label, color = NULL
     ) +
-    annotate("text", x = min(annual_obs$year) + 3, y = max(annual_obs$annual_mean),
-             label = paste0("mean bias = ", round(bias, 1),"%"), hjust = 0, size = 4) +
-  
+    annotate("text",
+      x = min(annual_obs$year) + 3, y = max(annual_obs$annual_mean),
+      label = paste0("mean bias = ", round(bias, 1), "%"), hjust = 0, size = 4
+    ) +
     theme_minimal(base_size = 12) +
     theme(
       plot.title = element_text(face = "bold"),
@@ -417,9 +422,10 @@ bias_trends_comparison <- function(obs_dt, mod_dt, var_name, obs_label, mod_labe
   # Combined
   bottom_row <- plot_grid(p_bias, p_map, ncol = 2, align = "h")
   fig <- plot_grid(p_temporal, bottom_row, nrow = 2, rel_heights = c(1, 1))
-  
-  
-  return(list( bias = p_bias, map = p_map,
+
+
+  return(list(
+    bias = p_bias, map = p_map,
     temporal = p_temporal, combined = fig
   ))
 }
@@ -441,9 +447,10 @@ obs_aet[, month := month(date)]
 mod_aet[, date := as.Date(paste0(date, "-15"), format = "%Y-%m-%d")]
 mod_aet[, month := month(date)]
 
-res_aet <- bias_trends_comparison(obs_dt=obs_aet, mod_dt=mod_aet, var_name="AET",
+res_aet <- bias_trends_comparison(
+  obs_dt = obs_aet, mod_dt = mod_aet, var_name = "AET",
   obs_label = "GLEAM v4.3a", mod_label = "HERA-WB",
-  y_label = "mm/month",dt="monthly"
+  y_label = "mm/month", dt = "monthly"
 )
 
 res_aet$combined
@@ -464,9 +471,10 @@ obs_swe[, month := month(date)]
 mod_swe[, date := as.Date(paste0(date, "-15"), format = "%Y-%m-%d")]
 mod_swe[, month := month(date)]
 
-res_swe <- bias_trends_comparison(obs_dt=obs_swe, mod_dt=mod_swe, "SWE",
+res_swe <- bias_trends_comparison(
+  obs_dt = obs_swe, mod_dt = mod_swe, "SWE",
   obs_label = "GlobSnow v3.0", mod_label = "HERA-WB",
-  y_label = "mm/month",dt="monthly"
+  y_label = "mm/month", dt = "monthly"
 )
 
 res_swe$combined
@@ -507,13 +515,13 @@ catch_cols_swe <- setdiff(names(mod_swe_days), c("date", "year"))
 
 n_days_total <- nrow(mod_swe_days)
 snow_pct <- mod_swe_days[, lapply(.SD, function(x) sum(x > 5, na.rm = TRUE) / n_days_total),
-                  .SDcols = catch_cols_swe
+  .SDcols = catch_cols_swe
 ]
 
 
 
 annual_max_swe <- mod_swe_days[, lapply(.SD, max, na.rm = TRUE),
-                        by = year, .SDcols = catch_cols_swe
+  by = year, .SDcols = catch_cols_swe
 ]
 
 years_no_snow <- colSums(annual_max_swe[, ..catch_cols_swe] <= 5, na.rm = TRUE)
@@ -564,12 +572,12 @@ mod_sweX[, month := month(date)]
 
 res_swe_locs <- bias_trends_comparison(obs_sweX, mod_sweX, "SWE",
   obs_label = "GlobSnow v3.0", mod_label = "HERA-WB",
-  y_label = "mm/month",dt="monthly"
+  y_label = "mm/month", dt = "monthly"
 )
 
 res_swe_locs$combined
 ggsave(file.path(plots_dir, "Supplement_Figure_SWE.png"), res_swe_locs$combined,
-       width = 14, height = 11, dpi = 400
+  width = 14, height = 11, dpi = 400
 )
 
 
@@ -680,7 +688,7 @@ setnames(mod_sm, mod_sm_cols, clean_mod)
 
 res_sm <- bias_trends_comparison(obs_sm, mod_sm, "Soil Moisture",
   obs_label = "ESA CCI", mod_label = "HERA-WB",
-  y_label = "m\u00b3/m\u00b3",dt="daily"
+  y_label = "m\u00b3/m\u00b3", dt = "daily"
 )
 res_sm$combined
 
@@ -742,7 +750,7 @@ max(obs_sm$date)
 
 res_sm <- bias_trends_comparison(obs_sm, mod_sm, "Soil Moisture - snow mask",
   obs_label = "ESA CCI", mod_label = "HERA-WB",
-  y_label = "m\u00b3/m\u00b3",dt="daily"
+  y_label = "m\u00b3/m\u00b3", dt = "daily"
 )
 
 res_sm$combined
@@ -754,7 +762,7 @@ res_sm$combined
 #   width = 10, height = 8, dpi = 200
 # )
 ggsave(file.path(plots_dir, "Supplement_Figure_SM_snowmasked.png"), res_sm$combined,
-       width = 14, height = 11, dpi = 400
+  width = 14, height = 11, dpi = 400
 )
 
 
@@ -815,7 +823,7 @@ ggplot() +
 
 
 
-#Root SM
+# Root SM
 
 agg_dir <- file.path(base_dir, "data", "aggregates")
 rsm_path <- file.path(
@@ -960,7 +968,7 @@ if (file.exists(dis_obs_strict_path) && file.exists(dis_sim_path)) {
   )
 
   ggsave(file.path(plots_dir, "Supplement_Figure_Discharge.png"), res_dis_relaxed$combined,
-         width = 14, height = 11, dpi = 400
+    width = 14, height = 11, dpi = 400
   )
 } else {
   cat("  Homogenized discharge files not found. Run homogenize_discharge.R first.\n")

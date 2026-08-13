@@ -553,7 +553,7 @@ for (sc in levels(catchment_summary_all$scenario)) {
 cat("[5/5] Generating diagnostic figures...\n")
 
 # --- Create output dir, load classification data ---
-path_out <- file.path(base_dir, "output", "discharge_diego", "3.figures")
+path_out <- file.path(base_dir, "output", "figures")
 dir.create(path_out, recursive = TRUE, showWarnings = FALSE)
 
 # Load catchment polygons

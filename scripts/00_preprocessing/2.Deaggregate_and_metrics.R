@@ -60,7 +60,8 @@ aet_file <- paste0(hydro_dir, "tss/HERA_Histo/ActEvapo_1951_2020.csv")
 pet_file <- paste0(hydro_dir, "tss/HERA_Histo/etUpsX_1951_2020.csv")
 
 # --- Output paths ---
-plot_dir <- paste0(base_dir, "plots/")
+plot_dir <- file.path(base_dir, "output", "figures")
+dir.create(plot_dir, showWarnings = FALSE, recursive = TRUE)
 
 # --- Analysis parameters ---
 year_range <- 1951:2020
@@ -180,7 +181,7 @@ estimate_lag <- function(parent_q, child_q, max_lag = 10L) {
   best_cor <- cor(p, c)
 
   n <- length(p)
-  for (k in seq(0,max_lag)) {
+  for (k in seq(0, max_lag)) {
     if (k >= n) break
     # Shift child back by k steps: compare parent[k+1:n] with child[1:(n-k)]
     r <- cor(p[(k + 1):n], c[1:(n - k)])
@@ -394,7 +395,7 @@ nco <- cord.UTM@coords
 # Discharge (disWin) uses volume-based mass balance (Q = TRUE).
 message("Starting batch deaggregation ...")
 
-batch_vars <- c( "disWin")
+batch_vars <- c("disWin")
 for (var in batch_vars) {
   is_discharge <- (var == "disWin")
   message("  Deaggregating: ", var)
@@ -451,5 +452,3 @@ for (var in batch_vars) {
 }
 
 message("deaggregate_and_metrics.R completed successfully.")
-
-

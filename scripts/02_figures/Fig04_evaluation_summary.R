@@ -70,7 +70,7 @@ reshape_extra <- function(daily_df, tex_df, reg_df, var_name) {
 
 reshape_extra_swe <- function(daily_df, tex_df, reg_df, var_name) {
   extra <- data.frame(daily_df, tex_df, reg_df)
-  
+
   daily_long <- data.frame(
     catch_id = extra$catch_id,
     rho = extra$rho,
@@ -95,7 +95,7 @@ reshape_extra_swe <- function(daily_df, tex_df, reg_df, var_name) {
     scenario = "Bot20",
     variable = var_name
   )
-  
+
   rbind(daily_long, top20_long, bot20_long, regime_long)
 }
 # --- AET ---
@@ -192,11 +192,11 @@ all_stats$variable <- factor(all_stats$variable,
   levels = c("Discharge", "AET", "Soil Moisture", "SWE")
 )
 
-#number of cathc  per variable
-length(unique(all_stats$catch_id[which(all_stats$variable=="AET")]))
-length(unique(all_stats$catch_id[which(all_stats$variable=="Soil Moisture")]))
-length(unique(all_stats$catch_id[which(all_stats$variable=="Discharge")]))
-length(unique(all_stats$catch_id[which(all_stats$variable=="SWE")]))
+# number of cathc  per variable
+length(unique(all_stats$catch_id[which(all_stats$variable == "AET")]))
+length(unique(all_stats$catch_id[which(all_stats$variable == "Soil Moisture")]))
+length(unique(all_stats$catch_id[which(all_stats$variable == "Discharge")]))
+length(unique(all_stats$catch_id[which(all_stats$variable == "SWE")]))
 # ===========================================================================
 # 3. ATTACH CLIMATE ZONES TO CATCHMENTS
 # ===========================================================================
@@ -251,17 +251,17 @@ cat(sprintf(
 
 ## Percentage of catchment of each climate zone ----------
 
-czones=unique(clim_lut$clim_class)
-tbl_czones=c()
-for( z in 1:length(czones)){
+czones <- unique(clim_lut$clim_class)
+tbl_czones <- c()
+for (z in 1:length(czones)) {
   print(czones[z])
-  l=length(which(clim_lut$clim_class==czones[z]))
-  p=round(length(which(clim_lut$clim_class==czones[z]))/length(clim_lut$clim_class)*100,1)
-  area=round(sum(shp$residual_area_km2[which(shp$clim_class==czones[z])])/sum(shp$residual_area_km2)*100,1)
-  tbl_c=c(czones[z],l,p,area)
-  tbl_czones=rbind(tbl_czones,tbl_c)
+  l <- length(which(clim_lut$clim_class == czones[z]))
+  p <- round(length(which(clim_lut$clim_class == czones[z])) / length(clim_lut$clim_class) * 100, 1)
+  area <- round(sum(shp$residual_area_km2[which(shp$clim_class == czones[z])]) / sum(shp$residual_area_km2) * 100, 1)
+  tbl_c <- c(czones[z], l, p, area)
+  tbl_czones <- rbind(tbl_czones, tbl_c)
 }
-sum(as.numeric(tbl_czones[,2]))
+sum(as.numeric(tbl_czones[, 2]))
 # ===========================================================================
 # 4. PALETTES AND THEME
 # ===========================================================================
@@ -436,7 +436,7 @@ summary_tbl <- all_stats[!is.na(clim_class), .(
 # ===========================================================================
 # 11. SAVE FIGURES
 # ===========================================================================
-path_out <- file.path(base_dir, "output", "combined_validation")
+path_out <- file.path(base_dir, "output", "figures")
 dir.create(path_out, recursive = TRUE, showWarnings = FALSE)
 
 ggsave(file.path(path_out, "FigA_combined_rho_violin_v2.png"), fig_a,

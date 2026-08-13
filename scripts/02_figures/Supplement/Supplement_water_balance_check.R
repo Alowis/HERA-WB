@@ -20,7 +20,7 @@ library(ggplot2)
 library(scales)
 library(cowplot)
 
-out_dir <- file.path(base_dir, "output", "water_balance")
+out_dir <- file.path(base_dir, "output", "figures")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
 # =============================================================================

@@ -75,6 +75,7 @@ for (lu_type in lu_types) {
         "\\1", nc_files
     ))
     ord <- order(years)
+    print(years)
     nc_files <- nc_files[ord]
     years <- years[ord]
     cat("  Years:", min(years), "-", max(years), "(", length(years), "files)\n")

@@ -28,13 +28,14 @@ library(terra)
 library(exactextractr)
 library(cowplot)
 
+
 # --- Paths --------------------------------------------------------------------
 base_dir <- "D:/tilloal/Documents/01_Projects/RegimeShifts/"
 agg_dir <- file.path(base_dir, "data", "aggregates")
 tss_dir <- file.path(base_dir, "data", "tss_postprocess")
 gpkg_path <- file.path(base_dir, "data", "catchments_analysis_final_v3.gpkg")
 landuse_dir <- "D:/tilloal/Documents/06_Floodrivers/landuse/"
-out_dir <- file.path(base_dir, "output", "temporal_evolution")
+out_dir <- file.path(base_dir, "output", "figures")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
 # --- Helper: assign dates to TSS data ----------------------------------------
@@ -649,28 +650,36 @@ stripe_vars <- list(
         label = "Infiltration (mean)", palette = "RdBu", rev = TRUE
     ),
     list(
-        var = "runoff", agg = "mean", months = NULL,
-        label = "Surface runoff (mean)", palette = "RdBu", rev = TRUE
-    ),
-    list(
-        var = "quz", agg = "mean", months = NULL,
-        label = "Interflow (mean)", palette = "RdBu", rev = TRUE
-    ),
-    list(
-        var = "qlz", agg = "mean", months = NULL,
-        label = "Baseflow (mean)", palette = "RdBu", rev = TRUE
-    ),
-    list(
-        var = "percolation", agg = "sum", months = NULL,
-        label = "Percolation (total)", palette = "RdBu", rev = TRUE
+        var = "surface_soil_moisture", agg = "mean",
+        label = "Surface SM (mean)", palette = "RdBu", rev = TRUE
     ),
     list(
         var = "root_soil_moisture", agg = "mean",
         label = "Root zone SM (mean)", palette = "RdBu", rev = TRUE
     ),
     list(
-        var = "surface_soil_moisture", agg = "mean",
-        label = "Surface SM (mean)", palette = "RdBu", rev = TRUE
+        var = "theta3", agg = "mean",
+        label = "Lower soil moisture (mean)", palette = "RdBu", rev = TRUE
+    ),
+    list(
+        var = "percolation", agg = "mean", months = NULL,
+        label = "Percolation soil to GW (mean)", palette = "RdBu", rev = TRUE
+    ),
+    list(
+        var = "prefflow", agg = "mean", months = NULL,
+        label = "direct GW recharge (mean)", palette = "RdBu", rev = TRUE
+    ),
+    list(
+        var = "runoff", agg = "mean", months = NULL,
+        label = "Surface runoff (mean)", palette = "RdBu", rev = TRUE
+    ),
+    list(
+        var = "quz", agg = "mean", months = NULL,
+        label = "Sub-surface flow (mean)", palette = "RdBu", rev = TRUE
+    ),
+    list(
+        var = "qlz", agg = "mean", months = NULL,
+        label = "Baseflow (mean)", palette = "RdBu", rev = TRUE
     ),
     list(
         var = "discharge", agg = "mean", months = NULL,
@@ -752,7 +761,7 @@ if (n_panels > 0) {
         x = 1, y = seq(-1, 1, length.out = 100),
         fill = seq(-1, 1, length.out = 100)
     )
-    pal_legend <- hcl.colors(11, palette = "RdBu", rev = FALSE)
+    pal_legend <- hcl.colors(11, palette = "RdBu", rev = T)
 
     p_legend <- ggplot(legend_dt, aes(x = x, y = y, fill = fill)) +
         geom_tile(width = 1, height = 0.02) +
@@ -788,4 +797,383 @@ if (n_panels > 0) {
     cat(sprintf("  -> Saved classic stripes figure (%d panels).\n", n_panels))
 } else {
     warning("No stripe panels were generated.")
+}
+
+# =============================================================================
+# CLASSIC CLIMATE STRIPES — Land use fractions (continental area-weighted)
+# =============================================================================
+# Produces Ed Hawkins-style stripes for each land use type, showing how the
+# continental average fraction has changed over available years.
+# =============================================================================
+
+cat("[Stripes] Building classic stripes for land use fractions...\n")
+
+# --- Land use types and their display settings --------------------------------
+lu_stripe_vars <- list(
+    list(
+        file = "fracsealed_catchment_yearly.csv",
+        label = "Sealed fraction", palette = "OrRd", rev = TRUE
+    ),
+    list(
+        file = "fracforest_catchment_yearly.csv",
+        label = "Forest fraction", palette = "BrBG", rev = TRUE
+    ),
+    list(
+        file = "fracirrigated_catchment_yearly.csv",
+        label = "Irrigated fraction", palette = "BrBG", rev = TRUE
+    ),
+    list(
+        file = "fracother_catchment_yearly.csv",
+        label = "Other land fraction", palette = "BrBG", rev = FALSE
+    ),
+    list(
+        file = "fracrice_catchment_yearly.csv",
+        label = "Rice fraction", palette = "BrBG", rev = TRUE
+    ),
+    list(
+        file = "fracwater_catchment_yearly.csv",
+        label = "Water fraction", palette = "PuBu", rev = TRUE
+    )
+)
+
+# --- Load catchments for area-weighting (reuse if available) ------------------
+if (!exists("catchments_for_stripes", envir = .GlobalEnv)) {
+    cats <- st_read(gpkg_path, quiet = TRUE)
+    assign("catchments_for_stripes", cats, envir = .GlobalEnv)
+}
+cats <- get("catchments_for_stripes", envir = .GlobalEnv)
+
+# --- Compute area-weighted continental mean for each land use type ------------
+lu_stripe_plots <- list()
+
+for (lu in lu_stripe_vars) {
+    lu_path <- file.path(agg_dir, "landuse", lu$file)
+    if (!file.exists(lu_path)) {
+        message("  Skipping (not found): ", lu$file)
+        next
+    }
+
+    cat(sprintf("  Computing land use stripes: %s ...\n", lu$label))
+
+    tryCatch(
+        {
+            dt <- fread(lu_path)
+
+            # First column is year
+            year_col <- names(dt)[1]
+            catch_cols <- setdiff(names(dt), year_col)
+
+            # Match catchment columns to area lookup
+            common_ids <- intersect(catch_cols, as.character(cats$catch_id))
+            if (length(common_ids) < 10) {
+                # Try matching as numeric
+                common_ids <- intersect(
+                    catch_cols,
+                    as.character(as.numeric(cats$catch_id))
+                )
+            }
+
+            area_vec <- cats$residual_area_km2[match(common_ids, as.character(cats$catch_id))]
+            weights <- area_vec / sum(area_vec, na.rm = TRUE)
+
+            # Area-weighted mean per year
+            mat <- as.matrix(dt[, ..common_ids])
+            weighted_mean <- apply(mat, 1, function(row) {
+                valid <- !is.na(row)
+                if (sum(valid) == 0) {
+                    return(NA_real_)
+                }
+                sum(row[valid] * weights[valid]) / sum(weights[valid])
+            })
+
+            annual_dt <- data.table(
+                year = dt[[year_col]],
+                annual_val = weighted_mean
+            )
+            long_mean <- mean(annual_dt$annual_val, na.rm = TRUE)
+            annual_dt[, anomaly := annual_val - long_mean]
+
+            # Normalize to [-1, 1]
+            mx <- max(abs(annual_dt$anomaly), na.rm = TRUE)
+            if (mx == 0) mx <- 1
+            annual_dt[, norm_anomaly := anomaly / mx]
+
+            pal <- hcl.colors(11, palette = "RdBu", rev = T)
+
+            p <- ggplot(annual_dt, aes(x = year, y = 1, fill = norm_anomaly)) +
+                geom_tile(width = 1, height = 1) +
+                scale_fill_gradientn(
+                    colors = pal,
+                    limits = c(-1, 1), oob = squish,
+                    name = NULL
+                ) +
+                scale_x_continuous(expand = c(0, 0)) +
+                scale_y_continuous(expand = c(0, 0)) +
+                labs(title = lu$label) +
+                theme_void(base_size = 10) +
+                theme(
+                    plot.title = element_text(
+                        face = "bold", hjust = 0, size = 10,
+                        margin = margin(b = 2)
+                    ),
+                    legend.position = "none",
+                    plot.margin = margin(2, 5, 2, 5)
+                )
+
+            lu_stripe_plots[[lu$label]] <- p
+        },
+        error = function(e) {
+            message("  ERROR for ", lu$label, ": ", conditionMessage(e))
+        }
+    )
+}
+
+# --- Add year axis at the bottom ----------------------------------------------
+lu_years <- fread(file.path(agg_dir, "landuse", lu_stripe_vars[[1]]$file),
+    select = 1
+)[[1]]
+year_axis_lu <- ggplot(data.frame(x = lu_years, y = 1), aes(x = x, y = y)) +
+    geom_blank() +
+    scale_x_continuous(
+        expand = c(0, 0),
+        breaks = seq(min(lu_years), max(lu_years), by = 5),
+        limits = c(min(lu_years) - 0.5, max(lu_years) + 0.5)
+    ) +
+    theme_void(base_size = 10) +
+    theme(
+        axis.text.x = element_text(size = 8, margin = margin(t = 2)),
+        axis.ticks.x = element_line(linewidth = 0.3),
+        axis.ticks.length.x = unit(2, "pt"),
+        plot.margin = margin(0, 5, 5, 5)
+    )
+
+# --- Compose land use stripes figure ------------------------------------------
+n_lu_panels <- length(lu_stripe_plots)
+if (n_lu_panels > 0) {
+    all_lu_panels <- c(lu_stripe_plots, list(year_axis = year_axis_lu))
+    rel_heights_lu <- c(rep(1, n_lu_panels), 0.4)
+
+    stripes_lu_body <- plot_grid(
+        plotlist = all_lu_panels,
+        ncol = 1, align = "v",
+        rel_heights = rel_heights_lu
+    )
+
+    # Shared legend on the right
+    pal_legend_lu <- hcl.colors(11, palette = "RdBu", rev = T)
+    legend_dt_lu <- data.table(
+        x = 1, y = seq(-1, 1, length.out = 100),
+        fill = seq(-1, 1, length.out = 100)
+    )
+
+    p_legend_lu <- ggplot(legend_dt_lu, aes(x = x, y = y, fill = fill)) +
+        geom_tile(width = 1, height = 0.02) +
+        scale_fill_gradientn(colors = pal_legend_lu, limits = c(-1, 1)) +
+        annotate("text",
+            x = 1, y = 1.12, label = "+ anomaly",
+            size = 3.2, fontface = "bold", hjust = 0.5
+        ) +
+        annotate("text",
+            x = 1, y = -1.12, label = "\u2013 anomaly",
+            size = 3.2, fontface = "bold", hjust = 0.5
+        ) +
+        scale_x_continuous(expand = c(0, 0)) +
+        scale_y_continuous(expand = c(0.15, 0)) +
+        coord_cartesian(clip = "off") +
+        theme_void() +
+        theme(
+            legend.position = "none",
+            plot.margin = margin(10, 10, 10, 10)
+        )
+
+    fig_lu_stripes <- plot_grid(
+        stripes_lu_body, p_legend_lu,
+        ncol = 2, rel_widths = c(1, 0.06)
+    )
+
+    ggsave(file.path(out_dir, "Figure_classic_stripes_landuse.png"),
+        fig_lu_stripes,
+        width = 15, height = n_lu_panels * 1.1 + 0.8,
+        dpi = 400
+    )
+    cat(sprintf("  -> Saved land use stripes figure (%d panels).\n", n_lu_panels))
+} else {
+    warning("No land use stripe panels were generated.")
+}
+
+# =============================================================================
+# SINGLE-CATCHMENT STRIPES — All variables for a user-chosen catchment
+# =============================================================================
+# Reads the per-catchment CSV from data/SHARE/timeseries_cat/ and produces
+# classic warming stripes for all available variables (yearly aggregates).
+# =============================================================================
+
+cat("[Stripes] Single-catchment stripes...\n")
+
+# --- USER CHOICE: set catchment ID here --------------------------------------
+selected_catchment <- "303662" # <-- Change this to any catchment ID
+
+# --- Paths --------------------------------------------------------------------
+cat_ts_dir <- file.path(base_dir, "data", "SHARE", "timeseries_cat")
+cat_file <- file.path(cat_ts_dir, paste0(selected_catchment, "_timeseries.csv"))
+
+if (!file.exists(cat_file)) {
+    stop(
+        "Catchment file not found: ", cat_file,
+        "\nAvailable catchments in: ", cat_ts_dir
+    )
+}
+
+cat(sprintf("  Catchment: %s\n", selected_catchment))
+
+# --- Read catchment data and compute yearly aggregates ------------------------
+cat_dt <- fread(cat_file, na.strings = c("NA", "-9999", ""))
+cat_dt[, date := as.Date(date)]
+cat_dt[, year := as.integer(year(date))]
+
+# Ensure all variable columns are numeric
+var_cols <- setdiff(names(cat_dt), c("date", "hour", "year"))
+cat_dt[, (var_cols) := lapply(.SD, as.numeric), .SDcols = var_cols]
+
+# Define how each variable should be aggregated annually
+# Fluxes (mm/6h) -> yearly sum; States (mm) -> yearly mean; Q (m3/s) -> mean
+var_agg <- list(
+    list(name = "RF", label = "Rainfall", agg = "sum"),
+    list(name = "SF", label = "Snowfall", agg = "sum"),
+    list(name = "SNM", label = "Snowmelt", agg = "sum"),
+    list(name = "INF", label = "Infiltration", agg = "sum"),
+    list(name = "AET", label = "Actual ET", agg = "sum"),
+    list(name = "SRF", label = "Surface runoff", agg = "sum"),
+    list(name = "ULF", label = "Preferential flow", agg = "sum"),
+    list(name = "SGW", label = "Soil-GW drainage", agg = "sum"),
+    list(name = "QUZ", label = "Interflow", agg = "sum"),
+    list(name = "QLZ", label = "Baseflow", agg = "sum"),
+    list(name = "GWL", label = "GW loss", agg = "sum"),
+    list(name = "GWR", label = "GW recharge", agg = "sum"),
+    list(name = "SSM", label = "Surface SM", agg = "mean"),
+    list(name = "RSM", label = "Root zone SM", agg = "mean"),
+    list(name = "LSM", label = "Lower SM", agg = "mean"),
+    list(name = "SWE", label = "Snow water eq.", agg = "mean"),
+    list(name = "Q", label = "Discharge", agg = "mean")
+)
+
+# --- Generate stripe for each variable present in the file --------------------
+cat_stripe_plots <- list()
+
+for (va in var_agg) {
+    if (!(va$name %in% names(cat_dt))) next
+
+    # Annual aggregate
+    if (va$agg == "sum") {
+        annual <- cat_dt[, .(val = sum(get(va$name), na.rm = TRUE)), by = year]
+    } else {
+        annual <- cat_dt[, .(val = mean(get(va$name), na.rm = TRUE)), by = year]
+    }
+
+    # Skip if all NA or zero
+    if (all(is.na(annual$val)) || all(annual$val == 0)) next
+
+    # Anomaly and normalize
+    long_mean <- mean(annual$val, na.rm = TRUE)
+    annual[, anomaly := val - long_mean]
+    mx <- max(abs(annual$anomaly), na.rm = TRUE)
+    if (mx == 0) mx <- 1
+    annual[, norm_anomaly := anomaly / mx]
+
+    pal <- hcl.colors(11, palette = "RdBu", rev = FALSE)
+
+    p <- ggplot(annual, aes(x = year, y = 1, fill = norm_anomaly))
+    p <- p + geom_tile(width = 1, height = 1)
+    p <- p + scale_fill_gradientn(
+        colors = pal,
+        limits = c(-1, 1), oob = squish,
+        name = NULL
+    )
+    p <- p + scale_x_continuous(expand = c(0, 0))
+    p <- p + scale_y_continuous(expand = c(0, 0))
+    p <- p + labs(title = va$label)
+    p <- p + theme_void(base_size = 10)
+    p <- p + theme(
+        plot.title = element_text(
+            face = "bold", hjust = 0, size = 10,
+            margin = margin(b = 2)
+        ),
+        legend.position = "none",
+        plot.margin = margin(2, 5, 2, 5)
+    )
+
+    cat_stripe_plots[[va$name]] <- p
+}
+
+# --- Year axis ----------------------------------------------------------------
+cat_years <- sort(unique(cat_dt$year))
+year_axis_cat <- ggplot(data.frame(x = cat_years, y = 1), aes(x = x, y = y)) +
+    geom_blank() +
+    scale_x_continuous(
+        expand = c(0, 0),
+        breaks = seq(min(cat_years), max(cat_years), by = 5),
+        limits = c(min(cat_years) - 0.5, max(cat_years) + 0.5)
+    ) +
+    theme_void(base_size = 10) +
+    theme(
+        axis.text.x = element_text(size = 8, margin = margin(t = 2)),
+        axis.ticks.x = element_line(linewidth = 0.3),
+        axis.ticks.length.x = unit(2, "pt"),
+        plot.margin = margin(0, 5, 5, 5)
+    )
+
+# --- Compose and save ---------------------------------------------------------
+n_cat_panels <- length(cat_stripe_plots)
+
+if (n_cat_panels > 0) {
+    all_cat_panels <- c(cat_stripe_plots, list(year_axis = year_axis_cat))
+    rel_heights_cat <- c(rep(1, n_cat_panels), 0.4)
+
+    stripes_cat_body <- plot_grid(
+        plotlist = all_cat_panels,
+        ncol = 1, align = "v",
+        rel_heights = rel_heights_cat
+    )
+
+    # Legend
+    legend_dt_cat <- data.table(
+        x = 1, y = seq(-1, 1, length.out = 100),
+        fill = seq(-1, 1, length.out = 100)
+    )
+    pal_legend_cat <- hcl.colors(11, palette = "RdBu", rev = FALSE)
+
+    p_legend_cat <- ggplot(legend_dt_cat, aes(x = x, y = y, fill = fill)) +
+        geom_tile(width = 1, height = 0.02) +
+        scale_fill_gradientn(colors = pal_legend_cat, limits = c(-1, 1)) +
+        annotate("text",
+            x = 1, y = 1.12, label = "+ anomaly",
+            size = 3.2, fontface = "bold", hjust = 0.5
+        ) +
+        annotate("text",
+            x = 1, y = -1.12, label = "\u2013 anomaly",
+            size = 3.2, fontface = "bold", hjust = 0.5
+        ) +
+        scale_x_continuous(expand = c(0, 0)) +
+        scale_y_continuous(expand = c(0.15, 0)) +
+        coord_cartesian(clip = "off") +
+        theme_void() +
+        theme(
+            legend.position = "none",
+            plot.margin = margin(10, 10, 10, 10)
+        )
+
+    fig_cat_stripes <- plot_grid(
+        stripes_cat_body, p_legend_cat,
+        ncol = 2, rel_widths = c(1, 0.06)
+    )
+
+    out_fname <- sprintf("Figure_stripes_catchment_%s.png", selected_catchment)
+    ggsave(file.path(out_dir, out_fname),
+        fig_cat_stripes,
+        width = 15, height = n_cat_panels * 1.1 + 0.8,
+        dpi = 400
+    )
+    cat(sprintf("  -> Saved: %s (%d panels)\n", out_fname, n_cat_panels))
+} else {
+    warning("No stripe panels generated for catchment ", selected_catchment)
 }

@@ -18,7 +18,7 @@ library(cowplot)
 # --- Paths --------------------------------------------------------------------
 base_dir <- "D:/tilloal/Documents/01_Projects/RegimeShifts/"
 gpkg_path <- file.path(base_dir, "data", "catchments_analysis_final_v3.gpkg")
-plot_dir <- file.path(base_dir, "plots")
+plot_dir <- file.path(base_dir, "output", "figures")
 dir.create(plot_dir, showWarnings = FALSE, recursive = TRUE)
 
 # --- Load catchments ----------------------------------------------------------
@@ -29,7 +29,9 @@ catchments_gpkg <- st_read(gpkg_path, quiet = TRUE)
 catchments_gpkg$n_nested <- sapply(
     catchments_gpkg$immediate_nested_ids,
     function(x) {
-        if (is.na(x) || trimws(x) == "NA" || trimws(x) == "") return(0L)
+        if (is.na(x) || trimws(x) == "NA" || trimws(x) == "") {
+            return(0L)
+        }
         length(trimws(strsplit(x, ",")[[1]]))
     }
 )

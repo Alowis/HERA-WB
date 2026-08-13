@@ -23,7 +23,7 @@ library(rnaturalearth)
 # 0. PATHS ---------------------------------------------------------
 base_dir <- "D:/tilloal/Documents/01_Projects/RegimeShifts/"
 path_stats <- file.path(base_dir, "output", "aet_diego", "2.stats")
-path_out <- file.path(base_dir, "output", "aet_diego", "3.figures")
+path_out <- file.path(base_dir, "output", "figures")
 file_shp <- file.path(base_dir, "data", "catchments_analysis_final_v3.gpkg")
 path_clim <- file.path(base_dir, "data", "koppen_geiger_0p1.tif")
 path_dem <- file.path(base_dir, "data", "dem.nc")

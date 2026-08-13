@@ -320,7 +320,7 @@ fig_combined <- (col_a | col_b | col_c) +
 # ===========================================================================
 # 8. SAVE
 # ===========================================================================
-path_out <- file.path(base_dir, "output", "combined_validation")
+path_out <- file.path(base_dir, "output", "figures")
 dir.create(path_out, recursive = TRUE, showWarnings = FALSE)
 
 ggsave(file.path(path_out, "Fig_2_AET_SM_combined.png"), fig_combined,

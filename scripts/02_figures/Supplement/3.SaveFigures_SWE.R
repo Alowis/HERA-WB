@@ -31,7 +31,7 @@ library(rnaturalearth)
 # 0. PATHS ---------------------------------------------------------
 base_dir <- "D:/tilloal/Documents/01_Projects/RegimeShifts/"
 path_stats <- file.path(base_dir, "output", "swe_diego", "2.stats")
-path_out <- file.path(base_dir, "output", "swe_diego", "3.figures")
+path_out <- file.path(base_dir, "output", "figures")
 file_shp <- file.path(base_dir, "data", "catchments_analysis_final_v3.gpkg")
 path_clim <- file.path(base_dir, "data", "koppen_geiger_0p1.tif")
 path_dem <- file.path(base_dir, "data", "dem.nc")
@@ -51,7 +51,7 @@ stats_15d <- readRDS(file.path(path_stats, "stats_15d_snow_filtered.rds"))
 stats_month <- readRDS(file.path(path_stats, "stats_month_snow_filtered.rds"))
 snow_flat <- readRDS(file.path(path_stats, "snow_filter.rds"))
 
-median(stats_15d$rho,na.rm=T)
+median(stats_15d$rho, na.rm = T)
 shp <- st_read(file_shp, quiet = TRUE)
 shp$join_id <- norm_id(shp$catch_id)
 
@@ -68,7 +68,7 @@ map_m <- left_join(shp, strip_id(stats_month), by = "join_id")
 
 hist(map_d$rho)
 length(which(!is.na(map_d$rho)))
-length(which(map_d$status=="Not Significant"))
+length(which(map_d$status == "Not Significant"))
 
 
 # 2. CLIMATE + ELEVATION + AREA ENRICHMENT -------------------------
@@ -141,12 +141,12 @@ all_meta <- bind_rows(
 message("Building scatter table...")
 clim_lut_dt <- as.data.table(meta_lut)[, .(id_key = join_id, clim_class)]
 
-build_scatter_dt <- function(obs_wide, mod_wide, label,snow_flat=NA) {
+build_scatter_dt <- function(obs_wide, mod_wide, label, snow_flat = NA) {
     obs_wide <- as.data.table(obs_wide)
     mod_wide <- as.data.table(mod_wide)
-    if(length(snow_flat)>1){
-         obs_wide=obs_wide[, c("date", snow_flat), with = FALSE]
-         mod_wide=mod_wide[, c("date", snow_flat), with = FALSE]
+    if (length(snow_flat) > 1) {
+        obs_wide <- obs_wide[, c("date", snow_flat), with = FALSE]
+        mod_wide <- mod_wide[, c("date", snow_flat), with = FALSE]
     }
     o <- melt(obs_wide, id.vars = "date", variable.name = "id_key", value.name = "obs")
     m <- melt(mod_wide, id.vars = "date", variable.name = "id_key", value.name = "mod")
@@ -161,10 +161,10 @@ build_scatter_dt <- function(obs_wide, mod_wide, label,snow_flat=NA) {
 }
 
 plot_dt <- rbind(
-    build_scatter_dt(obs_wide=swe_ts$daily$obs, mod_wide=swe_ts$daily$mod, "a) Daily",snow_flat),
-    build_scatter_dt(obs_wide=swe_ts$`7d`$obs, mod_wide=swe_ts$`7d`$mod, "b) 7-Day",snow_flat),
-    build_scatter_dt(obs_wide=swe_ts$`15d`$obs, mod_wide=swe_ts$`15d`$mod, "c) 15-Day",snow_flat),
-    build_scatter_dt(obs_wide=swe_ts$monthly$obs, mod_wide=swe_ts$monthly$mod, "d) Monthly",snow_flat)
+    build_scatter_dt(obs_wide = swe_ts$daily$obs, mod_wide = swe_ts$daily$mod, "a) Daily", snow_flat),
+    build_scatter_dt(obs_wide = swe_ts$`7d`$obs, mod_wide = swe_ts$`7d`$mod, "b) 7-Day", snow_flat),
+    build_scatter_dt(obs_wide = swe_ts$`15d`$obs, mod_wide = swe_ts$`15d`$mod, "c) 15-Day", snow_flat),
+    build_scatter_dt(obs_wide = swe_ts$monthly$obs, mod_wide = swe_ts$monthly$mod, "d) Monthly", snow_flat)
 )
 plot_dt[, scenario := factor(scenario, levels = c("a) Daily", "b) 7-Day", "c) 15-Day", "d) Monthly"))]
 plot_dt[, clim_class := factor(clim_class, levels = c("Polar", "Cold", "Temperate", "Arid", "Tropical"))]
@@ -187,12 +187,12 @@ plot_dt_sub <- plot_dt[!is.na(clim_class),
 ]
 set.seed(42)
 plot_dt_sub <- plot_dt[!is.na(clim_class),
-                       {
-                         tmp <- copy(.SD)
-                         tmp[, xbin := cut(mod, breaks = 100)]
-                         tmp[, .SD[sample(.N, min(.N, 500L))], by = xbin]
-                       },
-                       by = .(scenario, clim_class)
+    {
+        tmp <- copy(.SD)
+        tmp[, xbin := cut(mod, breaks = 100)]
+        tmp[, .SD[sample(.N, min(.N, 500L))], by = xbin]
+    },
+    by = .(scenario, clim_class)
 ]
 # 5. THEME + PALETTES ----------------------------------------------
 theme_nature <- function(base_size = 9) {
@@ -272,7 +272,7 @@ ggsave(file.path(path_out, "Fig0_SWE_spatial_rho_v2.png"), fig0,
     width = 40, height = 13, units = "cm", dpi = 300, bg = "white"
 )
 
-  # 7. FIG 1 | rho VIOLIN + BOX --------------------------------------
+# 7. FIG 1 | rho VIOLIN + BOX --------------------------------------
 message("Fig 1: rho violin...")
 fig1_ann <- all_meta %>%
     group_by(scenario) %>%
@@ -473,65 +473,67 @@ ggsave(file.path(path_out, "Fig6_SWE_aggregation_gain_v2.png"), fig6,
 
 # Extract LISFLOOD monthly SWE time series (row 1 = GlobSnow, row 2 = LISFLOOD)
 # Adjust row index depending on which scenario is LISFLOOD
-lf_swe_monthly <- swe_ts$monthly[[1]]  # row 2 = LISFLOOD (adjust if needed)
+lf_swe_monthly <- swe_ts$monthly[[1]] # row 2 = LISFLOOD (adjust if needed)
 
 date_col <- names(lf_swe_monthly)[1]
 # Parse dates and compute annual sums, then average across years
-lf_swe_monthly[, date := as.Date(paste0(get(date_col),"-01"))]
+lf_swe_monthly[, date := as.Date(paste0(get(date_col), "-01"))]
 lf_swe_monthly[, year := year(date)]
 
 catch_cols_swe <- setdiff(names(lf_swe_monthly), date_col)
 
 # Annual sum per catchment per year, then mean across years
 annual_sums <- lf_swe_monthly[, lapply(.SD, sum, na.rm = TRUE),
-                              by = year, .SDcols = catch_cols_swe]
+    by = year, .SDcols = catch_cols_swe
+]
 mean_swe <- colMeans(annual_sums[, ..catch_cols_swe], na.rm = TRUE)
 
 mean_swe_df <- data.frame(
-  join_id = norm_id(sub("^X", "", names(mean_swe))),
-  mean_swe = as.numeric(mean_swe),
-  stringsAsFactors = FALSE
+    join_id = norm_id(sub("^X", "", names(mean_swe))),
+    mean_swe = as.numeric(mean_swe),
+    stringsAsFactors = FALSE
 )
 
 # Get rho from stats (check column name — likely "rho" or "spearman_r")
-stats_df <- strip_id(stats_month)  # or stats_daily, depending on which rho you want
+stats_df <- strip_id(stats_month) # or stats_daily, depending on which rho you want
 # Identify the rho column
 rho_col <- intersect(c("rho", "spearman_r", "r", "cor"), names(stats_df))
 cat("Rho column found:", rho_col, "\n")
 
 # Merge
 scatter_df <- merge(mean_swe_df, stats_df[, c("join_id", rho_col[1])],
-                    by = "join_id", all.x = TRUE)
+    by = "join_id", all.x = TRUE
+)
 names(scatter_df)[3] <- "rho"
 
-scatter_df=scatter_df[which(!is.na(scatter_df$rho)),]
+scatter_df <- scatter_df[which(!is.na(scatter_df$rho)), ]
 
-nonan=scatter_df$join_id
+nonan <- scatter_df$join_id
 # Plot
 library(ggplot2)
 
 p_scatter <- ggplot(scatter_df, aes(x = mean_swe, y = rho)) +
-  geom_point(alpha = 0.5, size = 1.5, color = "steelblue") +
-  geom_smooth(method = "loess", se = TRUE, color = "darkblue") +
-  labs(
-    title = "Correlation (rho) vs HERA-WB mean yearly SWE per catchment",
-    x = "Mean yearly SWE (mm)",
-    y = expression("Monthly" ~ rho)
-  ) +
- scale_x_log10(breaks=c(0.001,0.1,1,10,100,1000,10000))+
-  theme_minimal(base_size = 12) +
-  theme(plot.title = element_text(face = "bold"))
+    geom_point(alpha = 0.5, size = 1.5, color = "steelblue") +
+    geom_smooth(method = "loess", se = TRUE, color = "darkblue") +
+    labs(
+        title = "Correlation (rho) vs HERA-WB mean yearly SWE per catchment",
+        x = "Mean yearly SWE (mm)",
+        y = expression("Monthly" ~ rho)
+    ) +
+    scale_x_log10(breaks = c(0.001, 0.1, 1, 10, 100, 1000, 10000)) +
+    theme_minimal(base_size = 12) +
+    theme(plot.title = element_text(face = "bold"))
 
 p_scatter
 
 ggsave(file.path(path_out, "FigS_rho_vs_SWE_v2.png"), p_scatter,
-       width = 18, height = 16, units = "cm", dpi = 300, bg = "white"
+    width = 18, height = 16, units = "cm", dpi = 300, bg = "white"
 )
 
 
 # 2. Extract mean elevation std per catchment from NetCDF raster
 
-elev_std_path <- file.path(base_dir, "data", "elvstd_European_01min.nc")  # adjust path if needed
+elev_std_path <- file.path(base_dir, "data", "elvstd_European_01min.nc") # adjust path if needed
 r_elev_std <- rast(elev_std_path)
 
 # Ensure catchments are in WGS84 for extraction
@@ -548,13 +550,14 @@ flat_catches <- norm_id(shp_wgs$catch_id[shp_wgs$elev_std < 50])
 # --- Filter catchments: snow every year + low elevation variability -----------
 
 # 1. Identify catchments with snow every year (annual max SWE > 0 for all years)
-gsw_swe_monthly <- swe_ts$monthly[[1]]  # row 2 = LISFLOOD (adjust if needed)
-gsw_swe_monthly[, date := as.Date(paste0(get(date_col),"-01"))]
+gsw_swe_monthly <- swe_ts$monthly[[1]] # row 2 = LISFLOOD (adjust if needed)
+gsw_swe_monthly[, date := as.Date(paste0(get(date_col), "-01"))]
 gsw_swe_monthly[, year := year(date)]
 catch_cols_swe <- setdiff(names(gsw_swe_monthly), date_col)
 
 annual_max_swe <- gsw_swe_monthly[, lapply(.SD, max, na.rm = TRUE),
-                                 by = year, .SDcols = catch_cols_swe]
+    by = year, .SDcols = catch_cols_swe
+]
 
 # Count years with zero snow per catchment
 years_no_snow <- colSums(annual_max_swe[, ..catch_cols_swe] <= 0, na.rm = TRUE)
@@ -566,9 +569,9 @@ catches_with_snow <- names(years_no_snow[years_no_snow == 0])
 snow_flat <- intersect(norm_id(sub("^X", "", catches_with_snow)), flat_catches)
 cat("Catchments with snow every year AND elev_std < 50:", length(snow_flat), "\n")
 
-subsample=which(!is.na(match(nonan,snow_flat)))
+subsample <- which(!is.na(match(nonan, snow_flat)))
 
-scat_sample<-scatter_df[subsample,]
+scat_sample <- scatter_df[subsample, ]
 median(scat_sample$rho)
 
 # 13. TABLES | median rho by stratum -------------------------------
