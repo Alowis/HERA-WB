@@ -15,11 +15,9 @@ library(exactextractr)
 library(data.table)
 
 # --- Paths --------------------------------------------------------------------
-base_dir <- "D:/tilloal/Documents/01_Projects/RegimeShifts/"
-landuse_dir <- "D:/tilloal/Documents/06_Floodrivers/landuse/"
-gpkg_path <- file.path(base_dir, "data", "catchments_analysis_final_v3.gpkg")
-out_dir <- file.path(base_dir, "data", "aggregates", "landuse")
-dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+source("config/paths.R")
+lu_out_dir <- file.path(agg_dir, "landuse")
+dir.create(lu_out_dir, showWarnings = FALSE, recursive = TRUE)
 
 # --- Land use types -----------------------------------------------------------
 lu_types <- c(

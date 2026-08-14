@@ -30,12 +30,7 @@ library(cowplot)
 
 
 # --- Paths --------------------------------------------------------------------
-base_dir <- "D:/tilloal/Documents/01_Projects/RegimeShifts/"
-agg_dir <- file.path(base_dir, "data", "aggregates")
-tss_dir <- file.path(base_dir, "data", "tss_postprocess")
-gpkg_path <- file.path(base_dir, "data", "catchments_analysis_final_v3.gpkg")
-landuse_dir <- "D:/tilloal/Documents/06_Floodrivers/landuse/"
-out_dir <- file.path(base_dir, "output", "figures")
+source("config/paths.R")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
 # --- Helper: assign dates to TSS data ----------------------------------------

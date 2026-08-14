@@ -17,6 +17,8 @@ The pipeline covers:
 HERA-WB/
 ├── config/
 │   └── paths.R                       # User-editable path configuration
+├── examples/
+│   └── monthly_sm_trend_maps.R       # Demo: monthly soil moisture trend maps
 ├── docs/
 │   └── variable_descriptions.csv     # Metadata for all HERA variables
 ├── R/

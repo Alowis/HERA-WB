@@ -103,21 +103,17 @@ DemOpen <- function(dir, outletname, Sloc_final) {
 }
 
 # --- Paths --------------------------------------------------------------------
-base_dir <- "D:/tilloal/Documents/01_Projects/RegimeShifts/"
-flood_dir <- "D:/tilloal/Documents/06_Floodrivers/"
-gpkg_path <- file.path(base_dir, "data", "catchments_analysis_final_v3.gpkg")
-out_dir <- file.path(base_dir, "data", "HERA_CAMELS", "attributes")
-dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+source("config/paths.R")
+attr_out_dir <- file.path(data_dir, "attributes")
+dir.create(attr_out_dir, showWarnings = FALSE, recursive = TRUE)
 
 # Raster paths
-path_dem <- file.path(base_dir, "data", "dem.nc")
-path_elvstd <- file.path(flood_dir, "mapscal", "elvstd_European_01min.nc")
-path_gradient <- file.path(flood_dir, "mapscal", "gradient_European_01min.nc")
-path_pop <- file.path(flood_dir, "mapscal", "population_European_01min.nc")
-path_clim <- file.path(base_dir, "data", "koppen_geiger_0p1.tif")
-path_ksat1_f <- file.path(flood_dir, "mapscal", "soilhyd", "ksat1_f_European_01min.nc")
-path_ksat1_o <- file.path(flood_dir, "mapscal", "soilhyd", "ksat1_o_European_01min.nc")
-path_outlets <- file.path("D:/tilloal/Documents/LFRuns_utils/data")
+path_elvstd <- file.path(hydro_dir, "mapscal", "elvstd_European_01min.nc")
+path_gradient <- file.path(hydro_dir, "mapscal", "gradient_European_01min.nc")
+path_pop <- file.path(hydro_dir, "mapscal", "population_European_01min.nc")
+path_ksat1_f <- file.path(hydro_dir, "mapscal", "soilhyd", "ksat1_f_European_01min.nc")
+path_ksat1_o <- file.path(hydro_dir, "mapscal", "soilhyd", "ksat1_o_European_01min.nc")
+path_outlets <- hydro_dir
 
 # Soil depth paths (layer 1a, 1b, 2 × forest/other)
 path_soildepth1_f <- file.path(flood_dir, "mapscal", "table2maps", "soildepth1_f_European_01min.nc")

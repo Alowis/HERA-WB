@@ -11,12 +11,11 @@ library(data.table)
 library(sp)
 
 # Path configuration -------------------------------------------------------
-base_dir <- "D:/tilloal/Documents/01_Projects/RegimeShifts/"
-hydroDir <- "D:/tilloal/Documents/LFRuns_utils/data/"
+source("config/paths.R")
 
 # Input paths
 stations_path <- file.path(base_dir, "Stations_ValidationF.csv")
-catchments_path <- file.path(base_dir, "data", "catchments_analysis_final_v3.gpkg")
+catchments_path <- gpkg_path
 
 # Input validation ---------------------------------------------------------
 if (!file.exists(stations_path)) {
@@ -121,7 +120,7 @@ cat(sprintf(
     n_valid, n_excluded, n_total
 ))
 
-st_write(stations_sf,paste0(base_dir,"stations.shp"))
+st_write(stations_sf, paste0(base_dir, "stations.shp"))
 # --- Catchment polygons ---
 cat("  Loading catchment polygons...\n")
 catchments_gpkg <- st_read(catchments_path, quiet = TRUE)
@@ -146,7 +145,7 @@ cat(sprintf("  Catchments: %d polygons loaded\n", nrow(catchments_gpkg)))
 cat("  Loading outlet coordinates and upstream area...\n")
 
 outletname <- "outletsv8_hybas07_01min"
-outhybas_raw <- outletopen(hydroDir, outletname)
+outhybas_raw <- outletopen(hydro_dir, outletname)
 outhybas_raw$idlalo <- paste(outhybas_raw$idlo, outhybas_raw$idla, sep = " ")
 outhybas_raw$latlong <- paste(round(outhybas_raw$Var1, 4),
     round(outhybas_raw$Var2, 4),
@@ -154,10 +153,10 @@ outhybas_raw$latlong <- paste(round(outhybas_raw$Var1, 4),
 )
 
 # Upstream area from NetCDF
-UpArea_full <- UpAopen(hydroDir, "upArea_European_01min.nc", outhybas_raw)
+UpArea_full <- UpAopen(hydro_dir, "upArea_European_01min.nc", outhybas_raw)
 
 # Filter to EU domain using river network mask
-out1 <- outletopen(hydroDir, "efas_rnet_100km_01min")
+out1 <- outletopen(hydro_dir, "efas_rnet_100km_01min")
 out1$latlong <- paste(round(out1$Var1, 4), round(out1$Var2, 4), sep = " ")
 outhybas_eu <- inner_join(out1, outhybas_raw, by = "latlong")
 
@@ -225,8 +224,8 @@ n_outlets <- nrow(outlets_valid)
 
 # Extract upstream area vectors
 station_upa_vec <- stations_valid$upa
-#catchment_upa_vec <- outlets_valid$catchment_upa
-ordc=match(as.numeric(catchments_plot$catch_id),outlets_sf$catch_id)
+# catchment_upa_vec <- outlets_valid$catchment_upa
+ordc <- match(as.numeric(catchments_plot$catch_id), outlets_sf$catch_id)
 
 catchment_upa_vec <- catchments_plot$residual_area_km2[ordc]
 
@@ -265,7 +264,7 @@ cat(sprintf(
 # # Keep only the closest station per catchment
 # strict_candidates <- strict_candidates[order(strict_candidates$distance_km), ]
 # strict_candidates <- strict_candidates[!duplicated(strict_candidates$station_id), ]
-# 
+#
 # cat(sprintf(
 #   "  Strict match candidates: %d pairs (distance <= 2 km & ratio in [0.5, 1.5])\n",
 #   nrow(strict_candidates)
@@ -276,7 +275,7 @@ cat(sprintf(
 # 1. Each station selects its best catchment (smallest distance, tie-break: smallest |upa diff|)
 # 2. Each catchment with multiple stations selects best station (smallest |upa diff|, tie-break: smallest distance)
 # 3. Repeat until all assignments are one-to-one
-# 
+#
 if (nrow(strict_candidates) == 0) {
     strict_matches <- strict_candidates[, c(
         "catch_id", "station_id", "distance_km",
@@ -367,7 +366,7 @@ if (nrow(strict_candidates) == 0) {
         nrow(strict_matches), iteration
     ))
 }
-# 
+#
 # strict_matches=strict_candidates
 cat(sprintf("  Strict matches found: %d\n", nrow(strict_matches)))
 
@@ -415,13 +414,13 @@ if (length(unmatched_ids) == 0) {
         station_indices <- pip_result[[i]]
         if (length(station_indices) == 0) {
             return(NULL)
-        }else{
-        data.frame(
-            poly_idx = i,
-            catch_id = as.character(unmatched_polys$catch_id[i]),
-            station_idx = station_indices,
-            stringsAsFactors = FALSE
-        )
+        } else {
+            data.frame(
+                poly_idx = i,
+                catch_id = as.character(unmatched_polys$catch_id[i]),
+                station_idx = station_indices,
+                stringsAsFactors = FALSE
+            )
         }
     }))
     if (is.null(pip_pairs) || nrow(pip_pairs) == 0) {
@@ -538,7 +537,7 @@ if (length(unmatched_ids) == 0) {
                 pip_pairs_resolved$dist_to_centroid_km[i] <- as.numeric(d) / 1000
             }
 
-   
+
             pip_pairs_resolved <- pip_pairs_resolved[
                 order(
                     pip_pairs_resolved$catch_id,
@@ -571,16 +570,16 @@ cat(sprintf(
 ))
 
 cat(sprintf(
-  "  Total individual catchment matched with stations: %d strict + %d relaxed = %d\n",
-  length(unique(strict_matches$catch_id)), length(unique(relaxed_matches$catch_id)),
-  length(unique(strict_matches$catch_id)) + length(unique(relaxed_matches$catch_id))
+    "  Total individual catchment matched with stations: %d strict + %d relaxed = %d\n",
+    length(unique(strict_matches$catch_id)), length(unique(relaxed_matches$catch_id)),
+    length(unique(strict_matches$catch_id)) + length(unique(relaxed_matches$catch_id))
 ))
 # [4/5] Exporting matching table -------------------------------------------
 cat("[4/5] Exporting matching table...\n")
 
 # Combine strict and relaxed matches into a single data frame
-n_strict <-   length(unique(strict_matches$catch_id))
-n_relaxed <-  length(unique(relaxed_matches$catch_id))
+n_strict <- length(unique(strict_matches$catch_id))
+n_relaxed <- length(unique(relaxed_matches$catch_id))
 n_total_matches <- n_strict + n_relaxed
 
 if (n_total_matches == 0) {
@@ -690,8 +689,8 @@ if (!dir.exists(output_dir)) {
     dir.create(output_dir, recursive = TRUE)
 }
 
-catmatch=catchments_gpkg[!is.na(match(catchments_gpkg$catch_id,output_df$catch_id)),]
-sum(catmatch$residual_area_km2)/sum(catchments_gpkg$residual_area_km2)
+catmatch <- catchments_gpkg[!is.na(match(catchments_gpkg$catch_id, output_df$catch_id)), ]
+sum(catmatch$residual_area_km2) / sum(catchments_gpkg$residual_area_km2)
 # Write CSV (UTF-8, header row)
 output_path <- file.path(output_dir, "station_catchment_matches.csv")
 write.csv(output_df,
@@ -707,4 +706,3 @@ cat(sprintf(
     "  Summary: %d catchments matched (%d strict + %d relaxed), %d unmatched\n",
     n_total_matches, n_strict, n_relaxed, n_unmatched
 ))
-

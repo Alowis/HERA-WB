@@ -18,10 +18,8 @@ library(terra)
 library(exactextractr)
 
 # --- Paths --------------------------------------------------------------------
-base_dir <- "D:/tilloal/Documents/01_Projects/RegimeShifts/"
-landuse_dir <- "D:/tilloal/Documents/06_Floodrivers/landuse/"
-gpkg_path <- file.path(base_dir, "data", "catchments_analysis_final_v3.gpkg")
-agg_lu_dir <- file.path(base_dir, "data", "aggregates", "landuse")
+source("config/paths.R")
+agg_lu_dir <- file.path(base_dir, "aggregates", "landuse")
 out_dir <- file.path(base_dir, "data", "HERA_CAMELS", "landuse")
 out_attr <- file.path(base_dir, "data", "HERA_CAMELS", "attributes")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)

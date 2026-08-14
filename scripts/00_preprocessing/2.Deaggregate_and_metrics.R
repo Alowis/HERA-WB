@@ -39,28 +39,23 @@ library(cowplot)
 # =============================================================================
 # SECTION 1: Configuration
 # =============================================================================
-base_dir <- "D:/tilloal/Documents/01_Projects/RegimeShifts/"
-hydro_dir <- "D:/tilloal/Documents/LFRuns_utils/data/"
+source("config/paths.R")
 
 # Source helper functions (preprocess_in, process_data, process_precip, etc.)
-source(paste0(base_dir, "RegimeShift_codes/R/functions_regime.R"))
+source("R/functions_regime.R")
 
 # --- Input paths ---
-gpkg_path <- paste0(base_dir, "data/catchments_analysis_final_v3.gpkg")
 outlet_name <- "outletsv8_hybas07_01min"
 uparea_file <- "upArea_European_01min.nc"
 efas_file <- "efas_rnet_100km_01min"
-path_clim <- paste0(base_dir, "data/koppen_geiger_0p1.tif")
-path_dem <- paste0(base_dir, "data/dem.nc")
 
 # --- TSS file paths ---
-rain_file <- paste0(base_dir, "data/tss/HERA_SocCF/RainUpsX_1951_2020.csv")
-snow_file <- paste0(base_dir, "data/tss/HERA_Histo/SnowUpsX_1951_2020.csv")
-aet_file <- paste0(hydro_dir, "tss/HERA_Histo/ActEvapo_1951_2020.csv")
-pet_file <- paste0(hydro_dir, "tss/HERA_Histo/etUpsX_1951_2020.csv")
+rain_file <- file.path(tss_raw, "HERA_SocCF", "RainUpsX_1951_2020.csv")
+snow_file <- file.path(tss_raw, "HERA_Histo", "SnowUpsX_1951_2020.csv")
+aet_file <- file.path(tss_raw, "HERA_Histo", "ActEvapo_1951_2020.csv")
+pet_file <- file.path(tss_raw, "HERA_Histo", "etUpsX_1951_2020.csv")
 
 # --- Output paths ---
-plot_dir <- file.path(base_dir, "output", "figures")
 dir.create(plot_dir, showWarnings = FALSE, recursive = TRUE)
 
 # --- Analysis parameters ---
