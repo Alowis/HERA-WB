@@ -124,16 +124,26 @@ pip install paramiko pcraster netCDF4 numpy pandas
 
 The full list of HERA variables with units and descriptions is in [`docs/variable_descriptions.csv`](docs/variable_descriptions.csv). Key variables include:
 
-| Variable | Description | Units |
-|----------|-------------|-------|
-| rainfall | Liquid precipitation | mm/6h |
-| snowfall | Solid precipitation | mm/6h |
-| ActEvapo | Actual evapotranspiration | mm/6h |
-| theta1/2/3 | Soil moisture (upper/middle/deep) | m3/m3 |
-| snowSWE | Snow water equivalent | mm |
-| disWin | Channel discharge | m³/s |
-| qlz | Baseflow (lower groundwater zone) | mm/6h |
+| Variable | Description | Units | Type |
+|----------|-------------|-------|------|
+| RF | Rainfall | mm/6h | flux |
+| SF | Snowfall | mm/6h | flux |
+| SNM | Snowmelt | mm/6h | flux |
+| INF | Infiltration | mm/6h | flux |
+| AET | Actual evapotranspiration | mm/6h | flux |
+| SRF | Direct surface runoff | mm/6h | flux |
+| ULF | Preferential flow | mm/6h | flux |
+| SGW | Soil to upper zone drainage | mm/6h | flux |
+| GWR | Percolation UZ to LZ | mm/6h | flux |
+| QUZ | Upper zone outflow | mm/6h | flux |
+| QLZ | Baseflow (lower zone) | mm/6h | flux |
+| GWL | Groundwater loss | mm/6h | flux |
+| Q | Channel discharge | m³/s | flux |
+| SSM | Surface soil moisture | mm | storage |
+| RSM | Root zone soil moisture | mm | storage |
+| LSM | Deep soil moisture | mm | storage |
+| SWE | Snow water equivalent | mm | storage |
 
 
 ## License
-
+Creative Commons Attribution 4.0 International
