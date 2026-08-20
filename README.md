@@ -146,4 +146,5 @@ The full list of HERA variables with units and descriptions is in [`docs/variabl
 
 
 ## License
-Creative Commons Attribution 4.0 International
+Copyright (Alois Tilloy - 2026). Licensed under
+the EUPL-1.2 or later
