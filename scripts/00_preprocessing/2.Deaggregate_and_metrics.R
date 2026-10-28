@@ -45,31 +45,35 @@ source("config/paths.R")
 source("R/functions_regime.R")
 
 # --- Input paths ---
-outlet_name <- "outletsv8_hybas07_01min"
-uparea_file <- "upArea_European_01min.nc"
-efas_file <- "efas_rnet_100km_01min"
+outlet_name <- "/netcdf/outletsv8_hybas07_01min"
+uparea_file <- "/netcdf/upArea_European_01min.nc"
+efas_file <- "netcdf/efas_rnet_100km_01min"
 
 # --- TSS file paths ---
-rain_file <- file.path(tss_raw, "HERA_SocCF", "RainUpsX_1951_2020.csv")
-snow_file <- file.path(tss_raw, "HERA_Histo", "SnowUpsX_1951_2020.csv")
-aet_file <- file.path(tss_raw, "HERA_Histo", "ActEvapo_1951_2020.csv")
-pet_file <- file.path(tss_raw, "HERA_Histo", "etUpsX_1951_2020.csv")
+rain_file <- file.path(tss_raw, "HERA_Histo", "RainUpsX_1951_2025.csv")
+snow_file <- file.path(tss_raw, "HERA_Histo", "SnowUpsX_1951_2025.csv")
+aet_file <- file.path(tss_raw, "HERA_Histo", "ActEvapo_1951_2025.csv")
+pet_file <- file.path(tss_raw, "HERA_Histo", "etUpsX_1951_2025.csv")
 
 # --- Output paths ---
 dir.create(plot_dir, showWarnings = FALSE, recursive = TRUE)
 
 # --- Analysis parameters ---
-year_range <- 1951:2020
+year_range <- 1951:2025
 dt_step <- 4 # 6-hourly time steps per day
 
 # --- Variables for batch deaggregation ---
 batch_vars <- c(
-  "rainUpsX", "snowMeltUpsX", "snowUpsX", "scovUps",
-  "qUzUpsX", "qLZUpsX", "surfaceRunoffUpsX", "infUpsX", "ActEvapo", "disWin",
-  "percUZLZUpsX", "dSubToUzUpsX", "prefFlowUpsX", "lossUpsX", "theta3UpsX",
-  "theta2UpsX", "theta1UpsX", "etUpsX"
+  'rainUpsX','snowUpsX','scovUps', 'snowMeltUpsX','frostUpsX', 'tAvgUpsX','theta1totalX','theta2totalX', 'theta3totalX',
+                    'qUzUpsX', 'qLZUpsX','surfaceRunoffUpsX','qLakeIn', 'qLakeOut','resfill','etUpsX','qresin',
+  'qresout','infUpsX','qLakeIn','qLakeOut','ActEvapo','disWin','prefFlowUpsX','percUZLZUpsX','dSubToUzUpsX','lossUpsX',"tAvgUpsX"
 )
 
+#batch_vars <- c( "qUzUpsX")
+
+
+bv<- c(  "rainUpsX", "snowMeltUpsX", "snowUpsX", "scovUps",
+         "qUzUpsX", "qLZUpsX", "surfaceRunoffUpsX", "infUpsX", "ActEvapo")
 # --- Plot settings ---
 tsize <- 12
 osize <- 12
@@ -390,12 +394,12 @@ nco <- cord.UTM@coords
 # Discharge (disWin) uses volume-based mass balance (Q = TRUE).
 message("Starting batch deaggregation ...")
 
-batch_vars <- c("disWin")
+#batch_vars <- c("disWin")
 for (var in batch_vars) {
   is_discharge <- (var == "disWin")
   message("  Deaggregating: ", var)
 
-  in_file <- paste0(base_dir, "data/tss/HERA_Histo/", var, "_1951_2020.csv")
+  in_file <- paste0(base_dir, "/tss/HERA_Histo/", var, "_1951_2025.csv")
   if (!file.exists(in_file)) {
     message("    File not found, skipping: ", in_file)
     next
@@ -418,7 +422,7 @@ for (var in batch_vars) {
     Vari_res <- lag_result$dt_residual
 
     # Save lag diagnostics table
-    lag_out <- paste0(base_dir, "data/discharge_lag_estimates.csv")
+    lag_out <- paste0(base_dir, "/discharge_lag_estimates.csv")
     fwrite(lag_result$lag_table, lag_out)
     message("    Lag table saved to: ", lag_out)
 
@@ -436,7 +440,7 @@ for (var in batch_vars) {
   # Prepend sorted timestamp column
   Vari_res <- data.table(time = time_v[order(time_v)], Vari_res)
 
-  out_file <- paste0(base_dir, "data/", var, "_nested_1951_2020_v2.csv")
+  out_file <- paste0(base_dir, "/tss_postprocess/", var, "_nested_1951_2025.csv")
   fwrite(Vari_res, out_file,
     sep = ",", na = "-9999", row.names = FALSE,
     quote = FALSE, showProgress = TRUE, nThread = 2

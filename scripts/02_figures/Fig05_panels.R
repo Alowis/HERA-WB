@@ -114,11 +114,10 @@ trend_annotation <- function(x, y) {
 
 # --- Panel a: Yearly max daily runoff — Paris ---------------------------------
 cat("  [a] Max daily runoff — Paris...\n")
-runoff_daily_path <- file.path(agg_dir, "runoff", "runoff_daily_all_years.csv")
+runoff_daily_path <- file.path(agg_dir, "runoff", "runoff_daily_all_years_25.csv")
 ro_daily <- fread(runoff_daily_path)
 ro_daily[, date := seq.Date(as.Date("1951-01-01"), by = "day", length.out = .N)]
 ro_daily[, year := year(date)]
-
 ro_col_roer <- find_col(catch_roer, setdiff(names(ro_daily), c("period_start", "period_end", "date", "year")))
 ro_roer_annual <- ro_daily[, .(max_runoff = max(get(ro_col_roer), na.rm = TRUE)), by = year]
 
@@ -140,11 +139,11 @@ p1a
 
 # --- Panel a: Yearly max daily runoff — Paris ---------------------------------
 cat("  [a] Max daily discharge — roer...\n")
-quz_daily_path <- file.path(agg_dir, "quz", "quz_daily_all_years.csv")
-qlz_daily_path <- file.path(agg_dir, "qlz", "qlz_daily_all_years.csv")
-runoff_daily_path <- file.path(agg_dir, "runoff", "runoff_daily_all_years.csv")
-dis_daily_path <- file.path(agg_dir, "discharge", "discharge_daily_all_years.csv")
-ssm_daily_path <- file.path(agg_dir, "surface_soil_moisture", "surface_soil_moisture_daily_all_years.csv")
+quz_daily_path <- file.path(agg_dir, "quz", "quz_daily_all_years_25.csv")
+qlz_daily_path <- file.path(agg_dir, "qlz", "qlz_daily_all_years_25.csv")
+runoff_daily_path <- file.path(agg_dir, "runoff", "runoff_daily_all_years_25.csv")
+dis_daily_path <- file.path(agg_dir, "discharge", "discharge_daily_all_years_25.csv")
+ssm_daily_path <- file.path(agg_dir, "theta1", "theta1_daily_all_years_25.csv")
 
 ro_daily <- fread(runoff_daily_path)
 ro_daily[, date := seq.Date(as.Date("1951-01-01"), by = "day", length.out = .N)]
@@ -168,7 +167,7 @@ sm_daily[, date := seq.Date(as.Date("1951-01-01"), by = "day", length.out = .N)]
 sm_daily[, year := year(date)]
 
 # Identify catchment columns (same across all three)
-meta_cols_q <- c("month_idx", "period_start", "period_end", "doy", "date", "year")
+meta_cols_q <- c("month_idx", "period_start", "period_end", "doy", "date", "year", "time")
 catch_cols_q <- setdiff(names(quz), meta_cols_q)
 totalQ_dt <- copy(quz)
 totalQ_dt[, (catch_cols_q) := Map(
@@ -200,28 +199,28 @@ p1b <- ggplot(dis_roer_annual, aes(x = year, y = qmm)) +
 
 p1b
 # --- Panel supp: Sealed area — roer --------------------------------------------
+
 cat("  [b] Sealed fraction — roer...\n")
-sealed_files <- list.files(landuse_dir,
-    pattern = "^fracsealed_European_01min_\\d{4}\\.nc$", full.names = TRUE
+# Read pre-aggregated per-catchment yearly sealed fraction from landuse CSV
+sealed_lu <- fread(file.path(landuse_dir, "fracsealed_catchment_yearly.csv"))
+
+# First column is year; remaining columns are catchment IDs
+sealed_year_col <- names(sealed_lu)[1]
+
+# Locate the roer catchment column (IDs may or may not carry an "X" prefix)
+sealed_col <- intersect(
+    c(catch_roer, paste0("X", catch_roer)),
+    names(sealed_lu)
+)[1]
+
+if (is.na(sealed_col)) {
+    stop("Catchment ", catch_roer, " not found in fracsealed_catchment_yearly.csv")
+}
+
+sealed_roer <- data.table(
+    year        = sealed_lu[[sealed_year_col]],
+    frac_sealed = sealed_lu[[sealed_col]]
 )
-sealed_years <- as.integer(sub(".*_(\\d{4})\\.nc$", "\\1", sealed_files))
-sealed_order <- order(sealed_years)
-sealed_files <- sealed_files[sealed_order]
-sealed_years <- sealed_years[sealed_order]
-
-if (!exists("catchments")) catchments <- st_read(gpkg_path, quiet = TRUE)
-if (!isTRUE(st_crs(catchments) == st_crs(4326))) {
-    catchments <- st_transform(catchments, 4326)
-}
-catch_sub_roer <- catchments[as.character(catchments$catch_id) == catch_roer, ]
-
-sealed_roer <- data.table(year = sealed_years, frac_sealed = NA_real_)
-for (i in seq_along(sealed_files)) {
-    r <- tryCatch(terra::rast(sealed_files[i]), error = function(e) NULL)
-    if (is.null(r)) next
-    if (nlyr(r) > 1) r <- r[[1]]
-    sealed_roer$frac_sealed[i] <- exact_extract(r, catch_sub_roer, "mean")
-}
 sealed_roer <- sealed_roer[!is.na(frac_sealed)]
 
 p1s <- ggplot(sealed_roer, aes(x = year, y = frac_sealed)) +
@@ -242,8 +241,8 @@ p1s
 # --- Panel c: Mean yearly soil moisture — Rio Cega ----------------------------
 cat("  [c] Mean yearly SM — Rio Cega...\n")
 sm_path_c <- file.path(
-    agg_dir, "root_soil_moisture",
-    "root_soil_moisture_monthly_all_years.csv"
+    agg_dir, "theta2",
+    "theta2_monthly_all_years_25.csv"
 )
 sm_dt_c <- fread(sm_path_c)
 sm_dt_c[, date := seq.Date(as.Date("1951-01-01"), by = "month", length.out = .N)]
@@ -273,7 +272,7 @@ p1c <- ggplot(sm_cega_annual, aes(x = year, y = mean_sm)) +
 
 # --- Panel d: Yearly total AET — Rio Cega ------------------------------------
 cat("  [d] Yearly total AET — Rio Cega...\n")
-aet_path_c <- file.path(agg_dir, "ActEvapo", "ActEvapo_monthly_all_years.csv")
+aet_path_c <- file.path(agg_dir, "ActEvapo", "ActEvapo_monthly_all_years_25.csv")
 aet_dt_c <- fread(aet_path_c)
 aet_dt_c[, date := seq.Date(as.Date("1951-01-01"), by = "month", length.out = .N)]
 aet_dt_c[, year := year(date)]
@@ -300,7 +299,7 @@ p1d <- ggplot(aet_cega_annual, aes(x = year, y = total_aet)) +
 
 # --- Panel e: Apr–Oct snowmelt — Ticino ---------------------------------------
 cat("  [e] Apr-Oct snowmelt — Ticino...\n")
-melt_path_e <- file.path(agg_dir, "snowmelt", "snowmelt_monthly_all_years.csv")
+melt_path_e <- file.path(agg_dir, "snowmelt", "snowmelt_monthly_all_years_25.csv")
 if (!file.exists(melt_path_e)) {
     # Fallback: use TSS
     melt_path_e <- file.path(tss_dir, "snowMeltUpsX_nested_1951_2020.csv")
@@ -421,7 +420,7 @@ fig1_new <- plot_grid(p1a, p1b, p1c, p1d, p1e, p1f,
     ncol = 2, align = "hv"
 )
 
-ggsave(file.path(out_dir, "Figure1_new_6panels_vF.png"),
+ggsave(file.path(out_dir, "Figure1_new_6panels_vFx.png"),
     fig1_new,
     width = 14, height = 12, dpi = 400
 )
@@ -842,7 +841,7 @@ cats <- get("catchments_for_stripes", envir = .GlobalEnv)
 lu_stripe_plots <- list()
 
 for (lu in lu_stripe_vars) {
-    lu_path <- file.path(agg_dir, "landuse", lu$file)
+    lu_path <- file.path(landuse_dir, lu$file)
     if (!file.exists(lu_path)) {
         message("  Skipping (not found): ", lu$file)
         next
@@ -924,7 +923,7 @@ for (lu in lu_stripe_vars) {
 }
 
 # --- Add year axis at the bottom ----------------------------------------------
-lu_years <- fread(file.path(agg_dir, "landuse", lu_stripe_vars[[1]]$file),
+lu_years <- fread(file.path(landuse_dir, lu_stripe_vars[[1]]$file),
     select = 1
 )[[1]]
 year_axis_lu <- ggplot(data.frame(x = lu_years, y = 1), aes(x = x, y = y)) +

@@ -34,11 +34,11 @@ base_dir <- "D:/tilloal/Documents/01_Projects/RegimeShifts/data"
 
 # LISFLOOD utilities and static data
 # hydro_dir <- "/path/to/LFRuns_utils/data"
-hydro_dir <- "D:/tilloal/Documents/LFRuns_utils/data"
+hydro_dir <- "D:/tilloal/Documents/01_Projects/HERA-WB_data"
 
 # Land use fraction rasters
 # landuse_dir <- "/path/to/landuse"
-landuse_dir <- file.path(data_dir, "landuse")
+landuse_dir <- file.path(hydro_dir, "landuse")
 
 # =============================================================================
 # DERIVED PATHS (do not edit below this line)

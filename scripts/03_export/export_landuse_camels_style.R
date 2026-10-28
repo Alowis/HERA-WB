@@ -19,9 +19,10 @@ library(exactextractr)
 
 # --- Paths --------------------------------------------------------------------
 source("config/paths.R")
-agg_lu_dir <- file.path(base_dir, "aggregates", "landuse")
-out_dir <- file.path(base_dir, "data", "HERA_CAMELS", "landuse")
-out_attr <- file.path(base_dir, "data", "HERA_CAMELS", "attributes")
+# Pre-aggregated per-catchment yearly land use CSVs
+agg_lu_dir <- landuse_dir
+out_dir <- file.path(data_dir, "HERA_CAMELS", "landuse")
+out_attr <- file.path(data_dir, "HERA_CAMELS", "attributes")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 dir.create(out_attr, showWarnings = FALSE, recursive = TRUE)
 
